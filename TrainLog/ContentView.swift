@@ -267,37 +267,28 @@ struct LogView: View {
     @State private var note = ""
     // フォームで追加した「今回のセット」を一時的に保持するための配列
     @State private var draftSets: [DraftSet] = []
-    // 種目カタログ(exercises.json)を検索するためのインデックスと検索結果
-    @State private var exerciseIndex: ExerciseIndex?
-    @State private var searchResults: [SearchResult] = []
+    // 種目カタログ(exercises.json)の一覧
+    @State private var exercisesCatalog: [ExerciseCatalog] = []
+    @State private var isLoadingExercises = true
+    @State private var exerciseLoadFailed = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("種目") {
-                    // 種目名を直接入力する。入力に応じて下に候補が出る
-                    TextField("種目を検索・入力", text: $exercise)
-                        .onChange(of: exercise) { oldValue, newValue in
-                            guard let idx = exerciseIndex, !newValue.isEmpty else {
-                                searchResults = []
-                                return
-                            }
-                            searchResults = Array(idx.search(newValue).prefix(5))
-                        }
-
-                    // 検索でヒットした種目をリスト表示。タップするとTextFieldに反映
-                    ForEach(searchResults, id: \.item.id) { result in
-                        Button {
-                            exercise = result.item.name
-                            // 候補タップでキーボードを閉じる
-                            hideKeyboard()
-                            searchResults = []
-                        } label: {
-                            HStack {
-                                Text(result.item.name)
-                                if !result.item.nameEn.isEmpty {
-                                    Text(result.item.nameEn)
-                                        .foregroundStyle(.secondary)
+                    if isLoadingExercises {
+                        ProgressView("読み込み中…")
+                    } else if exerciseLoadFailed {
+                        Text("種目リストを読み込めませんでした")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker("種目を選択", selection: $exercise) {
+                            Text("選択してください").tag("")
+                            ForEach(exercisesCatalog, id: \.id) { item in
+                                if item.nameEn.isEmpty {
+                                    Text(item.name).tag(item.name)
+                                } else {
+                                    Text("\(item.name) (\(item.nameEn))").tag(item.name)
                                 }
                             }
                         }
@@ -358,13 +349,21 @@ struct LogView: View {
                 }
             )
             .navigationTitle("トレーニングログ")
-            // 画面表示時に種目カタログ(exercises.json)を読み込んで検索できるようにする
+            // 画面表示時に種目カタログ(exercises.json)を読み込んでリストから選択できるようにする
             .task {
+                isLoadingExercises = true
+                exerciseLoadFailed = false
                 do {
                     let items = try ExerciseLoader.loadFromBundle()
-                    exerciseIndex = ExerciseIndex(items: items)
+                    exercisesCatalog = items.sorted { $0.name < $1.name }
+                    if !exercisesCatalog.contains(where: { $0.name == exercise }) {
+                        exercise = ""
+                    }
+                    isLoadingExercises = false
                 } catch {
                     print("exercises.json load error:", error)
+                    exerciseLoadFailed = true
+                    isLoadingExercises = false
                 }
             }
         }
