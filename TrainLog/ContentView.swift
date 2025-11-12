@@ -279,11 +279,8 @@ struct LogView: View {
                     if isLoadingExercises {
                         ProgressView("読み込み中…")
                     } else if exerciseLoadFailed {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("種目リストを読み込めませんでした")
-                                .foregroundStyle(.secondary)
-                            TextField("種目を直接入力", text: $exercise)
-                        }
+                        Text("種目リストを読み込めませんでした")
+                            .foregroundStyle(.secondary)
                     } else {
                         Picker("種目を選択", selection: $exercise) {
                             Text("選択してください").tag("")
