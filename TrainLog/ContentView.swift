@@ -464,7 +464,7 @@ struct ExercisePickerView: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(exercises, id: \.id) { item in
+                ForEach(Array(exercises.enumerated()), id: \.element.id) { index, item in
                     Button {
                         selection = item
                     } label: {
@@ -657,3 +657,4 @@ extension View {
 #Preview {
     ContentView()
 }
+
