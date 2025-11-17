@@ -463,31 +463,33 @@ struct ExercisePickerView: View {
 
     var body: some View {
         NavigationStack {
-            List(exercises, id: \.id) { item in
-                Button {
-                    selection = item
-                } label: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.name)
-                                .font(.body)
-                            if !item.nameEn.isEmpty {
-                                Text(item.nameEn)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+            List {
+                ForEach(exercises, id: \.id) { item in
+                    Button {
+                        selection = item
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.name)
+                                    .font(.body)
+                                if !item.nameEn.isEmpty {
+                                    Text(item.nameEn)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            if selection?.id == item.id {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.accentColor)
+                            } else {
+                                Image(systemName: "circle")
+                                    .foregroundStyle(.tertiary)
                             }
                         }
-                        Spacer()
-                        if selection?.id == item.id {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.accentColor)
-                        } else {
-                            Image(systemName: "circle")
-                                .foregroundStyle(.tertiary)
-                        }
                     }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
             .navigationTitle("種目を選択")
             .toolbar {
