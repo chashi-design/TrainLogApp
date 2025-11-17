@@ -497,9 +497,7 @@ struct ExercisePickerView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(exercises.indices, id: \.self) { index in
-                    let item = exercises[index]
+            List(exercises, id: \.id) { item in
                     Button {
                         selection = item
                     } label: {
