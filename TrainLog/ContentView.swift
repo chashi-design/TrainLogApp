@@ -272,88 +272,19 @@ struct LogView: View {
     @State private var exercisesCatalog: [ExerciseCatalog] = []
     @State private var isLoadingExercises = true
     @State private var exerciseLoadFailed = false
+    @State private var isShowingExercisePicker = false
+    @State private var pendingExerciseSelection: ExerciseCatalog?
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("日付") {
-                    LogCalendarSection(selectedDate: $selectedDate)
-
-                    Button {
-                        startNewWorkout()
-                    } label: {
-                        Label("＋ 追加", systemImage: "plus.circle.fill")
-                            .fontWeight(.semibold)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .padding(.top, 4)
-                }
-
-                Section("種目") {
-                    if isLoadingExercises {
-                        ProgressView("読み込み中…")
-                    } else if exerciseLoadFailed {
-                        Text("種目リストを読み込めませんでした")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Picker("種目を選択", selection: $exercise) {
-                            Text("選択してください").tag("")
-                            ForEach(exercisesCatalog, id: \.id) { item in
-                                if item.nameEn.isEmpty {
-                                    Text(item.name).tag(item.name)
-                                } else {
-                                    Text("\(item.name) (\(item.nameEn))").tag(item.name)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Section("負荷") {
-                    // 重量・レップ・RPEなど1セットに必要な情報を入力
-                    TextField("重量(kg)", text: $weight)
-                        .keyboardType(.decimalPad)
-                    TextField("レップ数", text: $reps)
-                        .keyboardType(.numberPad)
-                    TextField("RPE (任意)", text: $rpe)
-                        .keyboardType(.decimalPad)
-                }
-
-                Section("メモ") {
-                    TextField("メモ (任意)", text: $note)
-                }
-
-                // 入力した内容を一時的なセットとして下のリストに追加
-                Section {
-                    Button("このセットを追加") {
-                        addSet()
-                    }
-                    .disabled(exercise.isEmpty || weight.isEmpty || reps.isEmpty)
-                }
-                
-                // 一時的にためたセット(draftSets)を1つのWorkoutとしてDBに保存
-                Section {
-                    Button("このトレーニングを保存") {
-                        saveWorkout()
-                    }
-                    .disabled(draftSets.isEmpty)
-                }
-
-                // いま入力中のセットを表示（保存前の確認用）
-                if !draftSets.isEmpty {
-                    Section("今回のセット") {
-                        ForEach(draftSets) { set in
-                            HStack {
-                                Text(set.exerciseName)
-                                Spacer()
-                                Text("\(set.weight, format: .number.precision(.fractionLength(0...2))) kg × \(set.reps)")
-                            }
-                        }
-                        .onDelete { indexSet in
-                            draftSets.remove(atOffsets: indexSet)
-                        }
-                    }
-                }
+                dateSection
+                exerciseSection
+                loadSection
+                noteSection
+                addSetButtonSection
+                saveWorkoutSection
+                currentSetsSection
             }
             // スクロールやドラッグでキーボードを閉じやすくする
             .scrollDismissesKeyboard(.immediately)
@@ -380,9 +311,137 @@ struct LogView: View {
                     isLoadingExercises = false
                 }
             }
+            .sheet(isPresented: $isShowingExercisePicker) {
+                ExercisePickerView(
+                    exercises: exercisesCatalog,
+                    selection: $pendingExerciseSelection,
+                    onCancel: {
+                        pendingExerciseSelection = nil
+                        isShowingExercisePicker = false
+                    },
+                    onComplete: {
+                        guard let selection = pendingExerciseSelection else { return }
+                        exercise = selection.name
+                        pendingExerciseSelection = nil
+                        isShowingExercisePicker = false
+                    }
+                )
+            }
         }
     }
 
+    // MARK: - 入力フォームのセクション
+    @ViewBuilder
+    private var dateSection: some View {
+        Section("日付") {
+            LogCalendarSection(selectedDate: $selectedDate)
+        }
+    }
+
+    @ViewBuilder
+    private var exerciseSection: some View {
+        Section("種目") {
+            if isLoadingExercises {
+                ProgressView("読み込み中…")
+            } else if exerciseLoadFailed {
+                Text("種目リストを読み込めませんでした")
+                    .foregroundStyle(.secondary)
+            } else {
+                exercisePickerButtonStack
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var loadSection: some View {
+        Section("負荷") {
+            // 重量・レップ・RPEなど1セットに必要な情報を入力
+            TextField("重量(kg)", text: $weight)
+                .keyboardType(.decimalPad)
+            TextField("レップ数", text: $reps)
+                .keyboardType(.numberPad)
+            TextField("RPE (任意)", text: $rpe)
+                .keyboardType(.decimalPad)
+        }
+    }
+
+    @ViewBuilder
+    private var noteSection: some View {
+        Section("メモ") {
+            TextField("メモ (任意)", text: $note)
+        }
+    }
+
+    // 入力した内容を一時的なセットとして下のリストに追加
+    @ViewBuilder
+    private var addSetButtonSection: some View {
+        Section {
+            Button("このセットを追加") {
+                addSet()
+            }
+            .disabled(exercise.isEmpty || weight.isEmpty || reps.isEmpty)
+        }
+    }
+
+    // 一時的にためたセット(draftSets)を1つのWorkoutとしてDBに保存
+    @ViewBuilder
+    private var saveWorkoutSection: some View {
+        Section {
+            Button("このトレーニングを保存") {
+                saveWorkout()
+            }
+            .disabled(draftSets.isEmpty)
+        }
+    }
+
+    // いま入力中のセットを表示（保存前の確認用）
+    @ViewBuilder
+    private var currentSetsSection: some View {
+        if !draftSets.isEmpty {
+            Section("今回のセット") {
+                ForEach(draftSets) { set in
+                    HStack {
+                        Text(set.exerciseName)
+                        Spacer()
+                        Text("\(set.weight, format: .number.precision(.fractionLength(0...2))) kg × \(set.reps)")
+                    }
+                }
+                .onDelete { indexSet in
+                    draftSets.remove(atOffsets: indexSet)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var exercisePickerButtonStack: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                pendingExerciseSelection = currentExerciseCatalogItem()
+                isShowingExercisePicker = true
+            } label: {
+                Label("＋ 追加", systemImage: "plus.circle.fill")
+                    .fontWeight(.semibold)
+            }
+            .buttonStyle(.borderedProminent)
+
+            if let selected = currentExerciseCatalogItem() {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(selected.name)
+                        .font(.headline)
+                    if !selected.nameEn.isEmpty {
+                        Text(selected.nameEn)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Text("まだ種目が選択されていません")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
     // フォームの入力値から一時的なセット(DraftSet)を1件作って配列に追加する
     private func addSet() {
         let set = DraftSet(
@@ -424,14 +483,59 @@ struct LogView: View {
         note = ""
     }
 
-    private func startNewWorkout() {
-        selectedDate = LogDateHelper.normalized(selectedDate)
-        exercise = ""
-        weight = ""
-        reps = ""
-        rpe = ""
-        note = ""
-        draftSets.removeAll()
+    private func currentExerciseCatalogItem() -> ExerciseCatalog? {
+        exercisesCatalog.first { $0.name == exercise }
+    }
+}
+
+// MARK: - 種目ピッカー
+struct ExercisePickerView: View {
+    let exercises: [ExerciseCatalog]
+    @Binding var selection: ExerciseCatalog?
+    let onCancel: () -> Void
+    let onComplete: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(exercises, id: \.id) { item in
+                    Button {
+                        selection = item
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.name)
+                                    .font(.body)
+                                if !item.nameEn.isEmpty {
+                                    Text(item.nameEn)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            if selection?.id == item.id {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.accentColor)
+                            } else {
+                                Image(systemName: "circle")
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .navigationTitle("種目を選択")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完了", action: onComplete)
+                        .disabled(selection == nil)
+                }
+            }
+        }
     }
 }
 
