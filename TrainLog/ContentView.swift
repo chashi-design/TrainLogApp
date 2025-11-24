@@ -9,6 +9,7 @@
 import SwiftData
 import SwiftUI
 import Charts
+import Combine
 
 // MARK: - 履歴画面
 // 保存されたトレーニング(Workout)を日付の新しい順にリスト表示する画面です。
@@ -259,98 +260,56 @@ struct StatsItem {
 struct LogView: View {
     // SwiftDataにアクセスするためのコンテキスト
     @Environment(\.modelContext) private var context
-    // 画面上の入力値を保持しておくState
-    @State private var selectedDate = LogDateHelper.normalized(Date())
-    @State private var exercise = ""
-    @State private var weight = ""
-    @State private var reps = ""
-    @State private var rpe = ""
-    @State private var note = ""
-    // フォームで追加した「今回のセット」を一時的に保持するための配列
-    @State private var draftSets: [DraftSet] = []
-    // 種目カタログ(exercises.json)の一覧
-    @State private var exercisesCatalog: [ExerciseCatalog] = []
-    @State private var isLoadingExercises = true
-    @State private var exerciseLoadFailed = false
+    @StateObject private var viewModel = LogViewModel()
+    @State private var isShowingExercisePicker = false
+    @State private var selectedExerciseForEdit: DraftExerciseEntry?
+    @State private var pickerSelection: String?
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("日付") {
-                    LogCalendarSection(selectedDate: $selectedDate)
-
-                    Button {
-                        startNewWorkout()
-                    } label: {
-                        Label("＋ 追加", systemImage: "plus.circle.fill")
-                            .fontWeight(.semibold)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .padding(.top, 4)
+                    LogCalendarSection(selectedDate: $viewModel.selectedDate)
                 }
 
                 Section("種目") {
-                    if isLoadingExercises {
-                        ProgressView("読み込み中…")
-                    } else if exerciseLoadFailed {
-                        Text("種目リストを読み込めませんでした")
+                    Button {
+                        preparePickerSelection()
+                        isShowingExercisePicker = true
+                    } label: {
+                        Label("＋ 種目を追加", systemImage: "plus.circle.fill")
+                            .fontWeight(.semibold)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(viewModel.isLoadingExercises || viewModel.exerciseLoadFailed)
+                }
+
+                Section("今回の種目") {
+                    if viewModel.draftExercises.isEmpty {
+                        Text("追加された種目はありません。＋から追加してください。")
                             .foregroundStyle(.secondary)
                     } else {
-                        Picker("種目を選択", selection: $exercise) {
-                            Text("選択してください").tag("")
-                            ForEach(exercisesCatalog, id: \.id) { item in
-                                if item.nameEn.isEmpty {
-                                    Text(item.name).tag(item.name)
-                                } else {
-                                    Text("\(item.name) (\(item.nameEn))").tag(item.name)
+                        ForEach(viewModel.draftExercises) { entry in
+                            Button {
+                                selectedExerciseForEdit = entry
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(entry.exerciseName)
+                                            .font(.headline)
+                                        Text("\(entry.completedSetCount)セット")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .foregroundStyle(.secondary)
                                 }
                             }
+                            .buttonStyle(.plain)
                         }
-                    }
-                }
-
-                Section("負荷") {
-                    // 重量・レップ・RPEなど1セットに必要な情報を入力
-                    TextField("重量(kg)", text: $weight)
-                        .keyboardType(.decimalPad)
-                    TextField("レップ数", text: $reps)
-                        .keyboardType(.numberPad)
-                    TextField("RPE (任意)", text: $rpe)
-                        .keyboardType(.decimalPad)
-                }
-
-                Section("メモ") {
-                    TextField("メモ (任意)", text: $note)
-                }
-
-                // 入力した内容を一時的なセットとして下のリストに追加
-                Section {
-                    Button("このセットを追加") {
-                        addSet()
-                    }
-                    .disabled(exercise.isEmpty || weight.isEmpty || reps.isEmpty)
-                }
-                
-                // 一時的にためたセット(draftSets)を1つのWorkoutとしてDBに保存
-                Section {
-                    Button("このトレーニングを保存") {
-                        saveWorkout()
-                    }
-                    .disabled(draftSets.isEmpty)
-                }
-
-                // いま入力中のセットを表示（保存前の確認用）
-                if !draftSets.isEmpty {
-                    Section("今回のセット") {
-                        ForEach(draftSets) { set in
-                            HStack {
-                                Text(set.exerciseName)
-                                Spacer()
-                                Text("\(set.weight, format: .number.precision(.fractionLength(0...2))) kg × \(set.reps)")
-                            }
-                        }
-                        .onDelete { indexSet in
-                            draftSets.remove(atOffsets: indexSet)
+                        .onDelete { offsets in
+                            viewModel.removeDraftExercise(atOffsets: offsets)
                         }
                     }
                 }
@@ -365,79 +324,340 @@ struct LogView: View {
             .navigationTitle("トレーニングログ")
             // 画面表示時に種目カタログ(exercises.json)を読み込んでリストから選択できるようにする
             .task {
-                isLoadingExercises = true
-                exerciseLoadFailed = false
-                do {
-                    let items = try ExerciseLoader.loadFromBundle()
-                    exercisesCatalog = items.sorted { $0.name < $1.name }
-                    if !exercisesCatalog.contains(where: { $0.name == exercise }) {
-                        exercise = ""
+                await viewModel.loadExercises()
+                viewModel.syncDraftsForSelectedDate(context: context)
+            }
+            .sheet(isPresented: $isShowingExercisePicker) {
+                ExercisePickerSheet(
+                    exercises: viewModel.exercisesCatalog,
+                    selection: $pickerSelection,
+                    onCancel: {
+                        pickerSelection = nil
+                        isShowingExercisePicker = false
+                    },
+                    onComplete: {
+                        if let selection = pickerSelection,
+                           let name = viewModel.exerciseName(forID: selection) {
+                            viewModel.appendExercise(name)
+                        }
+                        pickerSelection = nil
+                        isShowingExercisePicker = false
                     }
-                    isLoadingExercises = false
-                } catch {
-                    print("exercises.json load error:", error)
-                    exerciseLoadFailed = true
-                    isLoadingExercises = false
+                )
+            }
+            .sheet(item: $selectedExerciseForEdit) { entry in
+                SetEditorSheet(viewModel: viewModel, exerciseID: entry.id)
+            }
+            .onChange(of: viewModel.selectedDate) {
+                viewModel.syncDraftsForSelectedDate(context: context)
+            }
+        }
+    }
+    
+    private func preparePickerSelection() {
+        // デフォルト選択を先頭に置く（未選択の場合）
+        if pickerSelection == nil, let first = viewModel.exercisesCatalog.first {
+            pickerSelection = first.id
+        }
+    }
+}
+
+@MainActor
+final class LogViewModel: ObservableObject {
+    @Published var selectedDate = LogDateHelper.normalized(Date())
+    @Published var exercisesCatalog: [ExerciseCatalog] = []
+    @Published var isLoadingExercises = true
+    @Published var exerciseLoadFailed = false
+    // 新UI用: 種目ごとにセットを管理するドラフト
+    @Published var draftExercises: [DraftExerciseEntry] = []
+
+    func loadExercises() async {
+        isLoadingExercises = true
+        exerciseLoadFailed = false
+        do {
+            let items = try ExerciseLoader.loadFromBundle()
+            exercisesCatalog = items.sorted { $0.name < $1.name }
+            isLoadingExercises = false
+        } catch {
+            print("exercises.json load error:", error)
+            exerciseLoadFailed = true
+            isLoadingExercises = false
+        }
+    }
+
+    func startNewWorkout() {
+        selectedDate = LogDateHelper.normalized(selectedDate)
+        draftExercises.removeAll()
+    }
+
+    func removeDraftExercise(atOffsets indexSet: IndexSet) {
+        draftExercises.remove(atOffsets: indexSet)
+    }
+
+    func exerciseName(forID id: String) -> String? {
+        exercisesCatalog.first(where: { $0.id == id })?.name
+    }
+
+    func draftEntry(with id: UUID) -> DraftExerciseEntry? {
+        draftExercises.first(where: { $0.id == id })
+    }
+
+    func saveWorkout(context: ModelContext) {
+        let savedSets = buildExerciseSets()
+        guard !savedSets.isEmpty else { return }
+
+        let normalizedDate = LogDateHelper.normalized(selectedDate)
+
+        if let existing = findWorkout(on: normalizedDate, context: context) {
+            existing.sets = savedSets
+        } else {
+            let workout = Workout(
+                date: normalizedDate,
+                note: "",
+                sets: savedSets
+            )
+            context.insert(workout)
+        }
+
+        do {
+            try context.save()
+        } catch {
+            print("Workout save error:", error)
+        }
+    }
+
+    private func findWorkout(on date: Date, context: ModelContext) -> Workout? {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
+            return nil
+        }
+
+        let descriptor = FetchDescriptor<Workout>(
+            predicate: #Predicate { workout in
+                workout.date >= startOfDay && workout.date < endOfDay
+            }
+        )
+
+        return try? context.fetch(descriptor).first
+    }
+
+    func syncDraftsForSelectedDate(context: ModelContext) {
+        let normalizedDate = LogDateHelper.normalized(selectedDate)
+        guard let workout = findWorkout(on: normalizedDate, context: context) else {
+            draftExercises = []
+            return
+        }
+
+        let grouped = Dictionary(grouping: workout.sets, by: { $0.exerciseName })
+        let mapped = grouped.map { exerciseName, sets -> DraftExerciseEntry in
+            let rows: [DraftSetRow] = sets.map { set in
+                DraftSetRow(weightText: String(set.weight), repsText: String(set.reps))
+            }
+            var entry = DraftExerciseEntry(exerciseName: exerciseName, defaultSetCount: 0)
+            entry.sets = rows
+            return entry
+        }
+
+        draftExercises = mapped.sorted { $0.exerciseName < $1.exerciseName }
+    }
+
+    func appendExercise(_ name: String, initialSetCount: Int = 5) {
+        let entry = DraftExerciseEntry(exerciseName: name, defaultSetCount: initialSetCount)
+        draftExercises.append(entry)
+    }
+
+    func addSetRow(to exerciseID: UUID) {
+        guard let index = draftExercises.firstIndex(where: { $0.id == exerciseID }) else { return }
+        draftExercises[index].sets.append(DraftSetRow())
+    }
+
+    func removeSetRow(exerciseID: UUID, setID: UUID) {
+        guard let index = draftExercises.firstIndex(where: { $0.id == exerciseID }) else { return }
+        draftExercises[index].sets.removeAll { $0.id == setID }
+    }
+
+    func updateSetRow(exerciseID: UUID, setID: UUID, weightText: String, repsText: String) {
+        guard let exerciseIndex = draftExercises.firstIndex(where: { $0.id == exerciseID }) else { return }
+        guard let setIndex = draftExercises[exerciseIndex].sets.firstIndex(where: { $0.id == setID }) else { return }
+        draftExercises[exerciseIndex].sets[setIndex].weightText = weightText
+        draftExercises[exerciseIndex].sets[setIndex].repsText = repsText
+    }
+
+    func weightText(exerciseID: UUID, setID: UUID) -> String {
+        guard let exerciseIndex = draftExercises.firstIndex(where: { $0.id == exerciseID }) else { return "" }
+        guard let setIndex = draftExercises[exerciseIndex].sets.firstIndex(where: { $0.id == setID }) else { return "" }
+        return draftExercises[exerciseIndex].sets[setIndex].weightText
+    }
+
+    func repsText(exerciseID: UUID, setID: UUID) -> String {
+        guard let exerciseIndex = draftExercises.firstIndex(where: { $0.id == exerciseID }) else { return "" }
+        guard let setIndex = draftExercises[exerciseIndex].sets.firstIndex(where: { $0.id == setID }) else { return "" }
+        return draftExercises[exerciseIndex].sets[setIndex].repsText
+    }
+
+    var hasValidSets: Bool {
+        draftExercises.contains { entry in
+            entry.sets.contains { $0.isValid }
+        }
+    }
+
+    private func buildExerciseSets() -> [ExerciseSet] {
+        let structured = draftExercises.flatMap { entry in
+            entry.exerciseSets()
+        }
+
+        return structured
+    }
+}
+
+struct DraftExerciseEntry: Identifiable {
+    let id = UUID()
+    var exerciseName: String
+    var sets: [DraftSetRow]
+
+    init(exerciseName: String, defaultSetCount: Int = 5) {
+        self.exerciseName = exerciseName
+        self.sets = (0..<defaultSetCount).map { _ in DraftSetRow() }
+    }
+
+    func exerciseSets() -> [ExerciseSet] {
+        sets.compactMap { $0.toExerciseSet(exerciseName: exerciseName) }
+    }
+
+    var completedSetCount: Int {
+        sets.filter { $0.isValid }.count
+    }
+}
+
+struct DraftSetRow: Identifiable {
+    let id = UUID()
+    var weightText: String = ""
+    var repsText: String = ""
+
+    func toExerciseSet(exerciseName: String) -> ExerciseSet? {
+        guard let weight = Double(weightText), let reps = Int(repsText) else { return nil }
+        return ExerciseSet(exerciseName: exerciseName, weight: weight, reps: reps)
+    }
+
+    var isValid: Bool {
+        Double(weightText) != nil && Int(repsText) != nil
+    }
+}
+
+struct ExercisePickerSheet: View {
+    let exercises: [ExerciseCatalog]
+    @Binding var selection: String?
+    var onCancel: () -> Void
+    var onComplete: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(exercises, id: \.id) { (item: ExerciseCatalog) in
+                    Button {
+                        selection = item.id
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(item.name)
+                                if !item.nameEn.isEmpty {
+                                    Text(item.nameEn)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            if selection == item.id {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .navigationTitle("種目を選択")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { onCancel() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完了") { onComplete() }
+                        .disabled(selection == nil)
                 }
             }
         }
     }
+}
 
-    // フォームの入力値から一時的なセット(DraftSet)を1件作って配列に追加する
-    private func addSet() {
-        let set = DraftSet(
-            exerciseName: exercise,
-            weight: Double(weight) ?? 0,
-            reps: Int(reps) ?? 0,
-            rpe: Double(rpe)
-        )
-        draftSets.append(set)
-        // 続けて同じ種目・重量を使う想定なのでそこは残す
-        reps = ""
-        rpe = ""
-    }
+struct SetEditorSheet: View {
+    @ObservedObject var viewModel: LogViewModel
+    let exerciseID: UUID
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
 
-    // draftSetsをSwiftData用のExerciseSetに変換し、1日のWorkoutとして保存する
-    private func saveWorkout() {
-        // ドラフトのセットをSwiftData用のセットに変換
-        let savedSets = draftSets.map { draft in
-            ExerciseSet(
-                exerciseName: draft.exerciseName,
-                weight: draft.weight,
-                reps: draft.reps,
-                rpe: draft.rpe
-            )
+    var body: some View {
+        NavigationStack {
+            if let entry = viewModel.draftEntry(with: exerciseID) {
+                List {
+                    Section(header: Text(entry.exerciseName)) {
+                        ForEach(entry.sets) { set in
+                            HStack {
+                                TextField("重量(kg)", text: Binding(
+                                    get: { viewModel.weightText(exerciseID: exerciseID, setID: set.id) },
+                                    set: { viewModel.updateSetRow(exerciseID: exerciseID, setID: set.id, weightText: $0, repsText: viewModel.repsText(exerciseID: exerciseID, setID: set.id)) }
+                                ))
+                                .keyboardType(.decimalPad)
+                                .frame(width: 90)
+
+                                TextField("レップ数", text: Binding(
+                                    get: { viewModel.repsText(exerciseID: exerciseID, setID: set.id) },
+                                    set: { viewModel.updateSetRow(exerciseID: exerciseID, setID: set.id, weightText: viewModel.weightText(exerciseID: exerciseID, setID: set.id), repsText: $0) }
+                                ))
+                                .keyboardType(.numberPad)
+                                .frame(width: 80)
+
+                                Spacer()
+
+                            Button(role: .destructive) {
+                                viewModel.removeSetRow(exerciseID: exerciseID, setID: set.id)
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(.red)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(entry.sets.count <= 1)
+                        }
+                    }
+
+                        Button {
+                            viewModel.addSetRow(to: exerciseID)
+                        } label: {
+                            Label("セットを追加", systemImage: "plus.circle.fill")
+                        }
+                    }
+                }
+                .navigationTitle("セット編集")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("閉じる") {
+                            viewModel.saveWorkout(context: context)
+                            dismiss()
+                        }
+                    }
+                }
+            } else {
+                VStack(spacing: 12) {
+                    Text("編集対象が見つかりませんでした")
+                        .foregroundStyle(.secondary)
+                    Button("閉じる") { dismiss() }
+                }
+                .padding()
+            }
         }
-
-        // Workoutにまとめる
-        let workout = Workout(
-            date: LogDateHelper.normalized(selectedDate),
-            note: note,
-            sets: savedSets
-        )
-
-        // 保存
-        context.insert(workout)
-        do {
-            try context.save()
-        } catch {
-            // 失敗してもユーザーの操作を止めないが、原因調査のためログに残す
-            print("Workout save error:", error)
-        }
-
-        // フォームをリセット
-        draftSets.removeAll()
-        note = ""
-    }
-
-    private func startNewWorkout() {
-        selectedDate = LogDateHelper.normalized(selectedDate)
-        exercise = ""
-        weight = ""
-        reps = ""
-        rpe = ""
-        note = ""
-        draftSets.removeAll()
     }
 }
 
@@ -498,20 +718,17 @@ struct LogCalendarSection: View {
             }
         }
         .padding(.vertical, 4)
-        .onChange(of: selectedDate) { newValue in
-            displayMonth = LogCalendarSection.monthStart(for: newValue)
+        .onChange(of: selectedDate) {
+            let newMonth = LogCalendarSection.monthStart(for: selectedDate)
+            if !calendar.isDate(displayMonth, equalTo: newMonth, toGranularity: .month) {
+                displayMonth = newMonth
+            }
         }
     }
 
     private func changeMonth(_ offset: Int) {
         guard let target = calendar.date(byAdding: .month, value: offset, to: displayMonth) else { return }
         displayMonth = LogCalendarSection.monthStart(for: target)
-        let currentDay = calendar.component(.day, from: selectedDate)
-        let range = calendar.range(of: .day, in: .month, for: displayMonth) ?? 1..<2
-        let clampedDay = min(currentDay, range.count)
-        if let newDate = calendar.date(bySetting: .day, value: clampedDay, of: displayMonth) {
-            selectedDate = LogDateHelper.normalized(newDate)
-        }
     }
 
     private func selectToday() {
@@ -589,6 +806,8 @@ extension View {
                                         to: nil, from: nil, for: nil)
     }
 }
+
+
 
 #Preview {
     ContentView()
