@@ -8,7 +8,7 @@ struct OverviewTabView: View {
     @State private var loadFailed = false
     @State private var refreshID = UUID()
 
-    private let calendar = Calendar.current
+    private let calendar = Calendar.mondayStart
     private let locale = Locale(identifier: "ja_JP")
 
     var body: some View {
@@ -224,7 +224,7 @@ struct OverviewPartsView: View {
     let workouts: [Workout]
 
     @State private var filter: PartsFilter = .all
-    private let calendar = Calendar.current
+    private let calendar = Calendar.mondayStart
     private let locale = Locale(identifier: "ja_JP")
 
     private var exerciseVolumes: [ExerciseVolume] {
@@ -249,7 +249,7 @@ struct OverviewPartsView: View {
     private var chartData: [(label: String, value: Double)] {
         weeklySeries
             .sorted { $0.date < $1.date }
-            .map { (axisLabel(for: $0.date), $0.volume) }
+            .map { (weekRangeLabel(for: $0.date), $0.volume) }
     }
     
     private var weeklyListData: [(label: String, value: Double)] {
@@ -275,7 +275,7 @@ struct OverviewPartsView: View {
                             Text(VolumeFormatter.string(from: item.value, locale: locale))
                                 .font(.subheadline.weight(.semibold))
                         }
-                        .padding(.vertical, 8)
+                        .padding(.vertical, 16)
                         if index < weeklyListData.count - 1 {
                             Divider()
                         }
@@ -331,13 +331,6 @@ struct OverviewPartsView: View {
             return exerciseVolumes.filter { $0.volume > 0 }
         }
     }
-
-    private func axisLabel(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.dateFormat = "M/d"
-        return formatter.string(from: date)
-    }
     
     private func weekRangeLabel(for date: Date) -> String {
         let start = calendar.startOfWeek(for: date) ?? date
@@ -381,7 +374,7 @@ struct OverviewExerciseDetailView: View {
     let workouts: [Workout]
 
     @State private var chartPeriod: ExerciseChartPeriod = .day
-    private let calendar = Calendar.current
+    private let calendar = Calendar.mondayStart
     private let locale = Locale(identifier: "ja_JP")
 
     private var chartData: [(label: String, value: Double)] {
@@ -505,7 +498,7 @@ struct OverviewExerciseDayDetailView: View {
     let date: Date
     let workouts: [Workout]
 
-    private let calendar = Calendar.current
+    private let calendar = Calendar.mondayStart
     private let locale = Locale(identifier: "ja_JP")
 
     private var sets: [ExerciseSet] {
@@ -1012,10 +1005,9 @@ extension OverviewPeriod {
         let start: Date
         switch self {
         case .week:
-            let weekday = calendar.component(.weekday, from: base)
-            let offsetToSunday = (weekday + 7 - 1) % 7 // 1 = Sunday
-            start = calendar.date(byAdding: .day, value: -offsetToSunday, to: base) ?? base
-            end = calendar.date(byAdding: .day, value: 7, to: start) ?? base
+            let weekStart = calendar.startOfWeek(for: base) ?? base
+            start = weekStart
+            end = calendar.date(byAdding: .day, value: 7, to: weekStart) ?? base
         case .month:
             let currentWeekStart = calendar.startOfWeek(for: base) ?? base
             start = calendar.date(byAdding: .weekOfYear, value: -7, to: currentWeekStart) ?? currentWeekStart
@@ -1059,6 +1051,14 @@ extension Calendar {
     func startOfWeek(for date: Date) -> Date? {
         let comps = dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
         return self.date(from: comps)
+    }
+
+    static var mondayStart: Calendar {
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.firstWeekday = 2
+        calendar.minimumDaysInFirstWeek = 4
+        calendar.timeZone = Calendar.current.timeZone
+        return calendar
     }
 }
 
