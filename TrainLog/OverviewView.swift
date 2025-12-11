@@ -8,7 +8,7 @@ struct OverviewTabView: View {
     @State private var loadFailed = false
     @State private var refreshID = UUID()
 
-    private let calendar = Calendar.mondayStart
+    private let calendar = Calendar.appCurrent
     private let locale = Locale(identifier: "ja_JP")
 
     var body: some View {
@@ -224,7 +224,7 @@ struct OverviewPartsView: View {
     let workouts: [Workout]
 
     @State private var filter: PartsFilter = .all
-    private let calendar = Calendar.mondayStart
+    private let calendar = Calendar.appCurrent
     private let locale = Locale(identifier: "ja_JP")
 
     private var exerciseVolumes: [ExerciseVolume] {
@@ -374,7 +374,7 @@ struct OverviewExerciseDetailView: View {
     let workouts: [Workout]
 
     @State private var chartPeriod: ExerciseChartPeriod = .day
-    private let calendar = Calendar.mondayStart
+    private let calendar = Calendar.appCurrent
     private let locale = Locale(identifier: "ja_JP")
 
     private var chartData: [(label: String, value: Double)] {
@@ -498,7 +498,7 @@ struct OverviewExerciseDayDetailView: View {
     let date: Date
     let workouts: [Workout]
 
-    private let calendar = Calendar.mondayStart
+    private let calendar = Calendar.appCurrent
     private let locale = Locale(identifier: "ja_JP")
 
     private var sets: [ExerciseSet] {
@@ -1049,15 +1049,14 @@ extension ExerciseChartPeriod {
 
 extension Calendar {
     func startOfWeek(for date: Date) -> Date? {
-        let comps = dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
-        return self.date(from: comps)
+        dateInterval(of: .weekOfYear, for: date)?.start
     }
 
-    static var mondayStart: Calendar {
-        var calendar = Calendar(identifier: .iso8601)
-        calendar.firstWeekday = 2
-        calendar.minimumDaysInFirstWeek = 4
-        calendar.timeZone = Calendar.current.timeZone
+    static var appCurrent: Calendar {
+        var calendar = Calendar.autoupdatingCurrent
+        // Respect user's locale/timeZone settings; avoid overriding unless needed.
+        calendar.firstWeekday = calendar.firstWeekday
+        calendar.minimumDaysInFirstWeek = calendar.minimumDaysInFirstWeek
         return calendar
     }
 }
