@@ -52,6 +52,13 @@ struct LogView: View {
             .onChange(of: viewModel.selectedDate) {
                 viewModel.syncDraftsForSelectedDate(context: context)
             }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("今日") {
+                        viewModel.selectedDate = LogDateHelper.normalized(Date())
+                    }
+                }
+            }
         }
     }
 
@@ -70,6 +77,21 @@ struct LogView: View {
         )
         return dots
     }
+    
+    private func muscleColor(for name: String) -> Color {
+        guard let exercise = viewModel.exercisesCatalog.first(where: { $0.name == name }) else {
+            return .gray
+        }
+        switch exercise.muscleGroup {
+        case "chest": return .red
+        case "shoulders": return .orange
+        case "arms": return .yellow
+        case "back": return .green
+        case "legs": return .teal
+        case "abs": return .indigo
+        default: return .gray
+        }
+    }
 
     private var calendarSection: some View {
         LogCalendarSection(
@@ -87,23 +109,25 @@ struct LogView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(viewModel.draftExercises) { entry in
-                    Button {
-                        selectedExerciseForEdit = entry
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.exerciseName)
-                                    .font(.headline)
-                                Text("\(entry.completedSetCount)セット")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
+                    HStack {
+                        Image(systemName: "circle.fill")
+                            .foregroundStyle(muscleColor(for: entry.exerciseName))
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(entry.exerciseName)
+                                .font(.headline)
+                            Text("\(entry.completedSetCount)セット")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedExerciseForEdit = entry
+                    }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button(role: .destructive) {
                             viewModel.removeDraftExercise(id: entry.id)
@@ -118,10 +142,9 @@ struct LogView: View {
 
     private var addExerciseRow: some View {
         HStack {
+            Image(systemName: "plus.circle.fill")
             Text("種目を追加")
                 .fontWeight(.semibold)
-            Spacer()
-            Image(systemName: "plus.circle.fill")
         }
         .foregroundStyle(.tint)
         .contentShape(Rectangle())
