@@ -17,8 +17,8 @@ struct LogCalendarSection: View {
     private let locale = Locale(identifier: "ja_JP")
     private let containerHeight: CGFloat = 312
     private let baseRowHeight: CGFloat = 40
-    private let baseSpacing: CGFloat = 0
-    private let calendarPadding: CGFloat = 0
+    private let baseSpacing: CGFloat = 10
+    private let calendarPadding: CGFloat = 8
     private let minCalendarHeight: CGFloat = 312
 
     init(selectedDate: Binding<Date>, workoutDots: [Date: [Color]]) {
@@ -178,10 +178,10 @@ struct LogCalendarSection: View {
                 )
 
             HStack(spacing: 2) {
-                ForEach(Array(dots.prefix(3)).indices, id: \.self) { idx in
+                ForEach(Array(dots.prefix(6)).indices, id: \.self) { idx in
                     Circle()
                         .fill(dots[idx])
-                        .frame(width: 5, height: 5)
+                        .frame(width: 5.5, height: 5.5)
                 }
             }
             .frame(height: 6)

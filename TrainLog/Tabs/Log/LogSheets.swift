@@ -134,7 +134,7 @@ struct SetEditorSheet: View {
                 List {
                     Section(header: Text(entry.exerciseName)) {
                         ForEach(entry.sets) { set in
-                            HStack {
+                            HStack(spacing: 12) {
                                 TextField(
                                     "重量(kg)",
                                     text: Binding(
@@ -143,7 +143,11 @@ struct SetEditorSheet: View {
                                     )
                                 )
                                 .keyboardType(.decimalPad)
-                                .frame(width: 90)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(Color(.tertiarySystemFill))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .frame(width: 110)
 
                                 TextField(
                                     "レップ数",
@@ -153,7 +157,11 @@ struct SetEditorSheet: View {
                                     )
                                 )
                                 .keyboardType(.numberPad)
-                                .frame(width: 80)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 8)
+                                .background(Color(.tertiarySystemFill))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .frame(width: 100)
 
                                 Spacer()
 
@@ -176,6 +184,7 @@ struct SetEditorSheet: View {
                     }
                 }
                 .navigationTitle("セット編集")
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
                         Button {

@@ -17,34 +17,30 @@ struct HistoryView: View {
                     )
                 } else {
                     ForEach(workouts) { workout in
-                        NavigationLink {
-                            WorkoutDetailView(workout: workout)
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(dateTimeString(for: workout.date))
-                                        .font(.headline)
-                                    if !workout.note.isEmpty {
-                                        Text(workout.note)
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                Spacer()
-                                Text("\(workout.sets.count)セット")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .swipeActions {
-                            Button(role: .destructive) {
-                                delete(workout: workout)
+                        SwipeDeleteRow(label: "") {
+                            delete(workout: workout)
+                        } content: {
+                            NavigationLink {
+                                WorkoutDetailView(workout: workout)
                             } label: {
-                                Label("削除", systemImage: "trash")
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(dateTimeString(for: workout.date))
+                                            .font(.headline)
+                                        if !workout.note.isEmpty {
+                                            Text(workout.note)
+                                                .font(.subheadline)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    Spacer()
+                                    Text("\(workout.sets.count)セット")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
-                    .onDelete(perform: deleteWorkouts)
                 }
             }
             .navigationTitle("履歴")
@@ -61,13 +57,6 @@ struct HistoryView: View {
     private func delete(workout: Workout) {
         context.delete(workout)
         try? context.save()
-    }
-
-    private func deleteWorkouts(atOffsets offsets: IndexSet) {
-        for index in offsets {
-            guard workouts.indices.contains(index) else { continue }
-            delete(workout: workouts[index])
-        }
     }
 }
 

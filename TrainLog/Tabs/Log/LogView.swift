@@ -109,30 +109,27 @@ struct LogView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(viewModel.draftExercises) { entry in
-                    HStack {
-                        Image(systemName: "circle.fill")
-                            .foregroundStyle(muscleColor(for: entry.exerciseName))
+                    SwipeDeleteRow(label: "") {
+                        viewModel.removeDraftExercise(id: entry.id)
+                    } content: {
+                        HStack {
+                            Image(systemName: "circle.fill")
+                                .foregroundStyle(muscleColor(for: entry.exerciseName))
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(entry.exerciseName)
-                                .font(.headline)
-                            Text("\(entry.completedSetCount)セット")
-                                .font(.caption)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(entry.exerciseName)
+                                    .font(.headline)
+                                Text("\(entry.completedSetCount)セット")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
                                 .foregroundStyle(.secondary)
                         }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .foregroundStyle(.secondary)
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectedExerciseForEdit = entry
-                    }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button(role: .destructive) {
-                            viewModel.removeDraftExercise(id: entry.id)
-                        } label: {
-                            Label("削除", systemImage: "trash")
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedExerciseForEdit = entry
                         }
                     }
                 }
@@ -146,6 +143,7 @@ struct LogView: View {
             Text("種目を追加")
                 .fontWeight(.semibold)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .foregroundStyle(.tint)
         .contentShape(Rectangle())
         .onTapGesture {
