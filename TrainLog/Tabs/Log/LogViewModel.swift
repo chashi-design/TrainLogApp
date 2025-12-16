@@ -106,8 +106,9 @@ final class LogViewModel: ObservableObject {
         if let workout = findWorkout(on: normalizedNewDate, context: context) {
             let grouped = Dictionary(grouping: workout.sets, by: { $0.exerciseName })
             let mapped = grouped.map { exerciseName, sets -> DraftExerciseEntry in
-                let rows: [DraftSetRow] = sets.map { set in
-                    DraftSetRow(weightText: String(set.weight), repsText: String(set.reps))
+                let rows: [DraftSetRow] = sets.map { set -> DraftSetRow in
+                    let intWeight = Int(set.weight.rounded(.toNearestOrAwayFromZero))
+                    return DraftSetRow(weightText: String(intWeight), repsText: String(set.reps))
                 }
                 var entry = DraftExerciseEntry(exerciseName: exerciseName, defaultSetCount: 0)
                 entry.sets = rows
@@ -135,6 +136,10 @@ final class LogViewModel: ObservableObject {
     func removeSetRow(exerciseID: UUID, setID: UUID) {
         guard let index = draftExercises.firstIndex(where: { $0.id == exerciseID }) else { return }
         draftExercises[index].sets.removeAll { $0.id == setID }
+    }
+
+    func moveDraftExercises(from source: IndexSet, to destination: Int) {
+        draftExercises.move(fromOffsets: source, toOffset: destination)
     }
 
     func updateSetRow(exerciseID: UUID, setID: UUID, weightText: String, repsText: String) {
@@ -196,12 +201,12 @@ struct DraftSetRow: Identifiable {
     var repsText: String = ""
 
     func toExerciseSet(exerciseName: String) -> ExerciseSet? {
-        guard let weight = Double(weightText), let reps = Int(repsText) else { return nil }
-        return ExerciseSet(exerciseName: exerciseName, weight: weight, reps: reps)
+        guard let weightInt = Int(weightText), let reps = Int(repsText) else { return nil }
+        return ExerciseSet(exerciseName: exerciseName, weight: Double(weightInt), reps: reps)
     }
 
     var isValid: Bool {
-        Double(weightText) != nil && Int(repsText) != nil
+        Int(weightText) != nil && Int(repsText) != nil
     }
 }
 

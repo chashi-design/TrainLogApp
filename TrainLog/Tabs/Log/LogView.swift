@@ -9,7 +9,10 @@ struct LogView: View {
     private var workouts: [Workout] { workoutsQuery }
     @State private var isShowingExercisePicker = false
     @State private var selectedExerciseForEdit: DraftExerciseEntry?
-    @State private var pickerSelection: String?
+    @State private var pickerSelections: Set<String> = []
+    @State private var editMode: EditMode = .inactive
+    @State private var selectedEntriesForDeletion: Set<UUID> = []
+    @State private var isShowingDeleteAlert = false
 
     var body: some View {
         NavigationStack {
@@ -31,17 +34,19 @@ struct LogView: View {
             .sheet(isPresented: $isShowingExercisePicker) {
                 ExercisePickerSheet(
                     exercises: viewModel.exercisesCatalog,
-                    selection: $pickerSelection,
+                    selections: $pickerSelections,
                     onCancel: {
-                        pickerSelection = nil
+                        pickerSelections.removeAll()
                         isShowingExercisePicker = false
                     },
                     onComplete: {
-                        if let selection = pickerSelection,
-                           let name = viewModel.exerciseName(forID: selection) {
-                            viewModel.appendExercise(name)
+                        let ids = pickerSelections
+                        for id in ids {
+                            if let name = viewModel.exerciseName(forID: id) {
+                                viewModel.appendExercise(name)
+                            }
                         }
-                        pickerSelection = nil
+                        pickerSelections.removeAll()
                         isShowingExercisePicker = false
                     }
                 )
@@ -49,22 +54,65 @@ struct LogView: View {
             .sheet(item: $selectedExerciseForEdit) { entry in
                 SetEditorSheet(viewModel: viewModel, exerciseID: entry.id)
             }
-            .onChange(of: viewModel.selectedDate) {
+            .onChange(of: viewModel.selectedDate) { _, _ in
                 viewModel.syncDraftsForSelectedDate(context: context)
             }
+            .onChange(of: editMode) { oldValue, newValue in
+                if !newValue.isEditing {
+                    selectedEntriesForDeletion.removeAll()
+                }
+            }
+            .environment(\.editMode, $editMode)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("今日") {
-                        viewModel.selectedDate = LogDateHelper.normalized(Date())
+                ToolbarItem(placement: .navigationBarLeading) {
+                    if editMode.isEditing {
+                        Button {
+                            isShowingDeleteAlert = true
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .disabled(selectedEntriesForDeletion.isEmpty)
+                    } else {
+                        Button("今日") {
+                            viewModel.selectedDate = LogDateHelper.normalized(Date())
+                        }
                     }
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if editMode.isEditing {
+                        Button {
+                            editMode = .inactive
+                        } label: {
+                            Label("完了", systemImage: "checkmark")
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("編集") {
+                            editMode = .active
+                        }
+                    }
+                }
+            }
+            .alert("選択した種目を削除しますか？", isPresented: $isShowingDeleteAlert) {
+                Button("削除", role: .destructive) {
+                    selectedEntriesForDeletion.forEach { id in
+                        viewModel.removeDraftExercise(id: id)
+                    }
+                    selectedEntriesForDeletion.removeAll()
+                    editMode = .inactive
+                }
+                Button("キャンセル", role: .cancel) {
+                    isShowingDeleteAlert = false
+                }
+            } message: {
+                Text("\(selectedEntriesForDeletion.count)件の種目を削除します。")
             }
         }
     }
 
     private func preparePickerSelection() {
-        if pickerSelection == nil, let first = viewModel.exercisesCatalog.first {
-            pickerSelection = first.id
+        if pickerSelections.isEmpty, let first = viewModel.exercisesCatalog.first {
+            pickerSelections = [first.id]
         }
     }
 
@@ -102,7 +150,9 @@ struct LogView: View {
 
     private var exerciseSection: some View {
         Section("今回の種目") {
-            addExerciseRow
+            if !editMode.isEditing {
+                addExerciseRow
+            }
 
             if viewModel.draftExercises.isEmpty {
                 Text("追加された種目はありません。＋から追加してください。")
@@ -112,36 +162,52 @@ struct LogView: View {
                     SwipeDeleteRow(label: "") {
                         viewModel.removeDraftExercise(id: entry.id)
                     } content: {
-                        HStack {
-                            Image(systemName: "circle.fill")
-                                .foregroundStyle(muscleColor(for: entry.exerciseName))
+                        HStack (spacing: 16){
+                            if editMode.isEditing {
+                                let isSelected = selectedEntriesForDeletion.contains(entry.id)
+                                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                            } else {
+                                Image(systemName: "circle.fill")
+                                    .foregroundStyle(muscleColor(for: entry.exerciseName))
+                            }
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(entry.exerciseName)
-                                    .font(.headline)
-                                Text("\(entry.completedSetCount)セット")
+                                    .font(.body)
+                                let weight = totalWeight(for: entry)
+                                Text("\(entry.completedSetCount)セット (\(weight)kg)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Image(systemName: "chevron.right")
-                                .foregroundStyle(.secondary)
+                            if !editMode.isEditing {
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            selectedExerciseForEdit = entry
+                            if editMode.isEditing {
+                                toggleSelection(for: entry.id)
+                            } else {
+                                selectedExerciseForEdit = entry
+                            }
                         }
                     }
+                }
+                .onMove { indices, newOffset in
+                    viewModel.moveDraftExercises(from: indices, to: newOffset)
                 }
             }
         }
     }
 
     private var addExerciseRow: some View {
-        HStack {
+        HStack(spacing: 16) {
             Image(systemName: "plus.circle.fill")
             Text("種目を追加")
-                .fontWeight(.semibold)
+                .font(.body.weight(.regular))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .foregroundStyle(.tint)
@@ -152,10 +218,26 @@ struct LogView: View {
         }
         .padding(.vertical, 8)
     }
+
+    private func toggleSelection(for id: UUID) {
+        if selectedEntriesForDeletion.contains(id) {
+            selectedEntriesForDeletion.remove(id)
+        } else {
+            selectedEntriesForDeletion.insert(id)
+        }
+    }
+
+    private func totalWeight(for entry: DraftExerciseEntry) -> Int {
+        entry.sets.compactMap { Int($0.weightText) }.reduce(0, +)
+    }
 }
 
 #Preview {
     LogView()
+}
+
+private extension EditMode {
+    var isEditing: Bool { self == .active }
 }
 
 enum WorkoutDotsBuilder {
