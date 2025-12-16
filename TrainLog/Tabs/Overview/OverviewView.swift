@@ -53,6 +53,7 @@ struct OverviewTabView: View {
             loadFailed = true
         }
     }
+
 }
 
 // MARK: - Top screen components
@@ -63,10 +64,13 @@ struct OverviewVolumeCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.headline)
-                .padding(.horizontal, 12)
-                .padding(.top, 12)
+            HStack {
+                Text(title)
+                    .font(.headline)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
 
             if series.isEmpty {
                 Text("今月の記録がありません")
@@ -91,9 +95,10 @@ struct OverviewVolumeCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedCorner(radius: 26, corners: [.bottomLeft, .bottomRight])
+            RoundedCorner(radius: 20, corners: [.allCorners])
                 .fill(Color(.tertiarySystemBackground))
         )
+        .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 }
 
@@ -276,20 +281,22 @@ struct OverviewPartsView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
+            }
 
+            Section {
                 NavigationLink {
                     OverviewPartsWeeklyListView(
-                        title: "\(displayName) リスト",
+                        title: "週ごとの記録",
                         items: weeklyListData,
                         workouts: workouts,
                         exercises: exercises
                     )
                 } label: {
-                    HStack {
-                        Text("全てのデータを表示")
-                            .foregroundStyle(.primary)
-                    }
-                    .padding(.vertical, 16)
+                    Text("週ごとの記録をすべて表示")
+                        .font(.headline.weight(.regular))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 4)
                 }
             }
 
