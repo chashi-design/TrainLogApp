@@ -1,3 +1,4 @@
+import Combine
 import SwiftData
 import SwiftUI
 
@@ -9,7 +10,6 @@ struct LogView: View {
     @Query(sort: \Workout.date, order: .reverse) private var workoutsQuery: [Workout]
     private var workouts: [Workout] { workoutsQuery }
     @State private var isShowingExercisePicker = false
-    @State private var selectedExerciseForEdit: DraftExerciseEntry?
     @State private var pickerSelections: Set<String> = []
     @State private var editMode: EditMode = .inactive
     @State private var selectedEntriesForDeletion: Set<UUID> = []
@@ -27,7 +27,7 @@ struct LogView: View {
                     hideKeyboard()
                 }
             )
-            .navigationTitle("トレーニングログ")
+            .navigationTitle("メモ")
                 .task {
                     await viewModel.loadExercises()
                     viewModel.syncDraftsForSelectedDate(context: context)
@@ -53,11 +53,13 @@ struct LogView: View {
                 )
                 .environmentObject(favoritesStore)
             }
-            .sheet(item: $selectedExerciseForEdit) { entry in
-                SetEditorSheet(viewModel: viewModel, exerciseID: entry.id)
-            }
             .onChange(of: viewModel.selectedDate) { _, _ in
                 viewModel.syncDraftsForSelectedDate(context: context)
+            }
+            .onReceive(viewModel.$draftRevision.dropFirst()) { _ in
+                if !viewModel.isSyncingDrafts {
+                    viewModel.saveWorkout(context: context)
+                }
             }
             .onChange(of: editMode) { oldValue, newValue in
                 if !newValue.isEditing {
@@ -68,38 +70,24 @@ struct LogView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if editMode.isEditing {
-                        Button {
+                        HapticButton {
                             isShowingDeleteAlert = true
                         } label: {
                             Image(systemName: "trash")
                         }
                         .disabled(selectedEntriesForDeletion.isEmpty)
                     } else {
-                        Button("今日") {
+                        HapticButton {
                             viewModel.selectedDate = LogDateHelper.normalized(Date())
-                        }
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if editMode.isEditing {
-                        Button {
-                            editMode = .inactive
                         } label: {
-                            Label("完了", systemImage: "checkmark")
-                        }
-                        .buttonStyle(.borderedProminent)
-                    } else {
-                        Button {
-                            editMode = .active
-                        } label: {
-                            Text("編集")
+                            Text("今日")
                         }
                     }
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if !editMode.isEditing {
-                        Button {
+                        HapticButton {
                             preparePickerSelection()
                             isShowingExercisePicker = true
                         } label: {
@@ -126,18 +114,29 @@ struct LogView: View {
     }
 
     private func preparePickerSelection() {
-        if pickerSelections.isEmpty, let first = viewModel.exercisesCatalog.first {
-            pickerSelections = [first.id]
-        }
+        // 初期選択はしない
     }
 
     private var workoutDots: [Date: [Color]] {
         let workoutsSnapshot = workouts
         let exercisesSnapshot = viewModel.exercisesCatalog
-        let dots = WorkoutDotsBuilder.dotsByDay(
+        var dots = WorkoutDotsBuilder.dotsByDay(
             workouts: workoutsSnapshot,
             exercises: exercisesSnapshot
         )
+
+        let calendar = Calendar.appCurrent
+        let selectedDay = calendar.startOfDay(for: viewModel.selectedDate)
+        let draftGroups = Set(viewModel.draftExercises.map { entry in
+            exercisesSnapshot.first(where: { $0.name == entry.exerciseName })?.muscleGroup ?? "other"
+        })
+
+        if draftGroups.isEmpty {
+            dots[selectedDay] = nil
+        } else {
+            dots[selectedDay] = WorkoutDotsBuilder.colors(for: Array(draftGroups))
+        }
+
         return dots
     }
     
@@ -145,15 +144,7 @@ struct LogView: View {
         guard let exercise = viewModel.exercisesCatalog.first(where: { $0.name == name }) else {
             return .gray
         }
-        switch exercise.muscleGroup {
-        case "chest": return .red
-        case "shoulders": return .orange
-        case "arms": return .yellow
-        case "back": return .green
-        case "legs": return .teal
-        case "abs": return .indigo
-        default: return .gray
-        }
+        return MuscleGroupColor.color(for: exercise.muscleGroup)
     }
 
     private var calendarSection: some View {
@@ -173,36 +164,43 @@ struct LogView: View {
                     SwipeDeleteRow(label: "") {
                         viewModel.removeDraftExercise(id: entry.id)
                     } content: {
-                        HStack (spacing: 16){
-                            if editMode.isEditing {
+                        if editMode.isEditing {
+                            HStack(spacing: 16) {
                                 let isSelected = selectedEntriesForDeletion.contains(entry.id)
                                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(isSelected ? Color.accentColor : .secondary)
-                            } else {
-                                Image(systemName: "circle.fill")
-                                    .foregroundStyle(muscleColor(for: entry.exerciseName))
-                            }
 
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.exerciseName)
-                                    .font(.headline)
-                                let weight = totalWeight(for: entry)
-                                Text("\(entry.completedSetCount)セット (\(weight)kg)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(entry.exerciseName)
+                                        .font(.headline)
+                                    let weight = totalWeight(for: entry)
+                                    Text("\(entry.completedSetCount)セット (\(weight)kg)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
                             }
-                            Spacer()
-                            if !editMode.isEditing {
-                                Image(systemName: "chevron.right")
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if editMode.isEditing {
+                            .contentShape(Rectangle())
+                            .onTapGesture {
                                 toggleSelection(for: entry.id)
-                            } else {
-                                selectedExerciseForEdit = entry
+                            }
+                        } else {
+                            NavigationLink {
+                                SetEditorView(viewModel: viewModel, exerciseID: entry.id)
+                            } label: {
+                                HStack(spacing: 16) {
+                                    Image(systemName: "circle.fill")
+                                        .foregroundStyle(muscleColor(for: entry.exerciseName))
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(entry.exerciseName)
+                                            .font(.headline)
+                                        let weight = totalWeight(for: entry)
+                                        Text("\(entry.completedSetCount)セット (\(weight)kg)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                }
                             }
                         }
                     }
@@ -223,7 +221,11 @@ struct LogView: View {
     }
 
     private func totalWeight(for entry: DraftExerciseEntry) -> Int {
-        entry.sets.compactMap { Int($0.weightText) }.reduce(0, +)
+        entry.sets.compactMap { set in
+            guard let weight = Int(set.weightText), let reps = Int(set.repsText) else { return nil }
+            return weight * reps
+        }
+        .reduce(0, +)
     }
 }
 
@@ -261,25 +263,19 @@ enum WorkoutDotsBuilder {
         }
 
         return buckets.mapValues { groups in
-            muscleOrder.compactMap { key in
-                groups.contains(key) ? groupColor[key] : nil
-            }
-            + groups
-                .filter { !muscleOrder.contains($0) }
-                .compactMap { groupColor[$0] ?? groupColor["other"] }
+            colors(for: Array(groups))
         }
     }
 
-    private static var groupColor: [String: Color] {
-        [
-            "chest": .red,
-            "shoulders": .orange,
-            "arms": .yellow,
-            "back": .green,
-            "legs": .teal,
-            "abs": .indigo,
-            "other": .gray
-        ]
+    static func colors(for groups: [String]) -> [Color] {
+        let set = Set(groups)
+        let ordered = muscleOrder.compactMap { key in
+            set.contains(key) ? MuscleGroupColor.color(for: key) : nil
+        }
+        let remaining = set
+            .filter { !muscleOrder.contains($0) }
+            .sorted()
+        return ordered + remaining.map { MuscleGroupColor.color(for: $0) }
     }
 
     private static var muscleOrder: [String] {

@@ -7,6 +7,10 @@ struct LogCalendarSection: View {
 
     @State private var months: [Date]
     @State private var selectionIndex: Int
+    @State private var monthNavHapticTrigger: Int = 0
+    @State private var swipeHapticTrigger: Int = 0
+    @State private var dayTapHapticTrigger: Int = 0
+    @State private var suppressSwipeHaptic = false
 
     private var currentMonth: Date {
         months[safe: selectionIndex] ?? LogCalendarSection.startOfMonth(calendar, date: selectedDate)
@@ -42,6 +46,9 @@ struct LogCalendarSection: View {
             weekdayHeader
             pager
         }
+        .sensoryFeedback(.impact(weight: .light), trigger: monthNavHapticTrigger)
+        .sensoryFeedback(.impact(weight: .light), trigger: dayTapHapticTrigger)
+        .sensoryFeedback(.impact(weight: .light), trigger: swipeHapticTrigger)
         .padding(.vertical, 4)
         .onChange(of: selectedDate, initial: false) { _, newValue in
             let month = LogCalendarSection.startOfMonth(calendar, date: newValue)
@@ -67,6 +74,8 @@ struct LogCalendarSection: View {
         let month = months[safe: selectionIndex] ?? LogCalendarSection.startOfMonth(calendar, date: selectedDate)
         return HStack {
             Button {
+                suppressSwipeHaptic = true
+                monthNavHapticTrigger += 1
                 shiftMonth(by: -1)
             } label: {
                 Image(systemName: "chevron.left")
@@ -82,6 +91,8 @@ struct LogCalendarSection: View {
             Spacer()
 
             Button {
+                suppressSwipeHaptic = true
+                monthNavHapticTrigger += 1
                 shiftMonth(by: 1)
             } label: {
                 Image(systemName: "chevron.right")
@@ -115,6 +126,11 @@ struct LogCalendarSection: View {
         .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
         .frame(height: containerHeight, alignment: .top)
         .onChange(of: selectionIndex, initial: false) { _, newValue in
+            if suppressSwipeHaptic {
+                suppressSwipeHaptic = false
+            } else {
+                swipeHapticTrigger += 1
+            }
             guard months.indices.contains(newValue) else { return }
             let month = months[newValue]
             if !calendar.isDate(selectedDate, equalTo: month, toGranularity: .month) {
@@ -189,6 +205,8 @@ struct LogCalendarSection: View {
         .frame(height: 48)
         .contentShape(Rectangle())
         .onTapGesture {
+            suppressSwipeHaptic = true
+            dayTapHapticTrigger += 1
             selectedDate = LogDateHelper.normalized(date)
         }
     }
