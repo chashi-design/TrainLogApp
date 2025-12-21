@@ -141,7 +141,7 @@ final class LogViewModel: ObservableObject {
         lastSyncedDate = normalizedNewDate
     }
 
-    func appendExercise(_ name: String, initialSetCount: Int = 5) {
+    func appendExercise(_ name: String, initialSetCount: Int = 2) {
         let entry = DraftExerciseEntry(exerciseName: name, defaultSetCount: initialSetCount)
         draftExercises.append(entry)
         draftRevision += 1
@@ -204,7 +204,7 @@ struct DraftExerciseEntry: Identifiable {
     var exerciseName: String
     var sets: [DraftSetRow]
 
-    init(exerciseName: String, defaultSetCount: Int = 5) {
+    init(exerciseName: String, defaultSetCount: Int = 2) {
         self.exerciseName = exerciseName
         self.sets = (0..<defaultSetCount).map { _ in DraftSetRow() }
     }

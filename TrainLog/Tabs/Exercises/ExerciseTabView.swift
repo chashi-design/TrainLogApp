@@ -38,14 +38,14 @@ struct ExerciseTabView: View {
                 Section {
                     NavigationLink {
                         ExerciseListView(
-                            title: "登録済み",
+                            title: "お気に入り",
                             exercises: favoriteExercises
                         )
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "star.fill")
                                 .foregroundStyle(.yellow)
-                            Text("登録済み")
+                            Text("お気に入り")
                                 .foregroundStyle(favoriteExercises.isEmpty ? .secondary : .primary)
                             Spacer()
                             Text("\(favoriteExercises.count)種目")
