@@ -1,6 +1,7 @@
 import SwiftData
 import SwiftUI
 
+// 種目選択シート
 struct ExercisePickerSheet: View {
     let exercises: [ExerciseCatalog]
     @Binding var selections: Set<String>
@@ -12,6 +13,12 @@ struct ExercisePickerSheet: View {
     @State private var searchText: String = ""
     @State private var selectionFeedbackTrigger = 0
     @State private var searchFeedbackTrigger = 0
+    private var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+    private var strings: ExercisePickerStrings {
+        ExercisePickerStrings(isJapanese: isJapaneseLocale)
+    }
 
     private let muscleGroupOrder = ["chest", "shoulders", "arms", "back", "legs", "abs"]
     private let searchGroupOrder = ["chest", "shoulders", "arms", "back", "legs", "abs"]
@@ -19,19 +26,19 @@ struct ExercisePickerSheet: View {
     var body: some View {
         NavigationStack {
             listView
-                .navigationTitle("種目を選択")
+                .navigationTitle(strings.navigationTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .applyScrollEdgeEffectStyleIfAvailable()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        HapticButton(action: onCancel) { Text("キャンセル") }
+                        HapticButton(action: onCancel) { Text(strings.cancelTitle) }
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         HapticButton {
                             onComplete()
                         } label: {
                             Label {
-                                Text("完了")
+                                Text(strings.doneTitle)
                             } icon: {
                                 Image(systemName: "checkmark")
                                     .fontWeight(.semibold)
@@ -44,7 +51,7 @@ struct ExercisePickerSheet: View {
                 .searchable(
                     text: $searchText,
                     placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "種目名で検索"
+                    prompt: strings.searchPrompt
                 )
                 .searchFocused($isSearchFocused)
                 .modifier(SearchToolbarVisibility())
@@ -72,7 +79,7 @@ struct ExercisePickerSheet: View {
         List {
             if !isSearchFocused, !muscleGroups.isEmpty {
                 VStack(spacing: 0) {
-                    Picker("部位", selection: $selectedGroup) {
+                    Picker(strings.muscleGroupPickerTitle, selection: $selectedGroup) {
                         ForEach(muscleGroups, id: \.self) { group in
                             Text(MuscleGroupLabel.label(for: group)).tag(String?.some(group))
                         }
@@ -88,7 +95,7 @@ struct ExercisePickerSheet: View {
             }
             if isSearchFocused {
                 if !searchFavorites.isEmpty {
-                    Section("お気に入り") {
+                    Section(strings.favoritesTitle) {
                         ForEach(searchFavorites, id: \.id) { item in
                             exerciseRow(for: item)
                         }
@@ -107,7 +114,9 @@ struct ExercisePickerSheet: View {
                 }
             } else {
                 if !filteredFavorites.isEmpty {
-                    let favoriteLabel = selectedGroup.map { "\(MuscleGroupLabel.label(for: $0))のお気に入り" } ?? "お気に入り"
+                    let favoriteLabel = strings.favoritesSectionTitle(
+                        groupName: selectedGroup.map { MuscleGroupLabel.label(for: $0) }
+                    )
                     Section(favoriteLabel) {
                         ForEach(filteredFavorites, id: \.id) { item in
                             exerciseRow(for: item)
@@ -116,7 +125,9 @@ struct ExercisePickerSheet: View {
                 }
 
                 if !filteredNonFavorites.isEmpty {
-                    let groupLabel = selectedGroup.map { "\(MuscleGroupLabel.label(for: $0))の種目" } ?? "種目"
+                    let groupLabel = strings.exercisesSectionTitle(
+                        groupName: selectedGroup.map { MuscleGroupLabel.label(for: $0) }
+                    )
                     Section(groupLabel) {
                         ForEach(filteredNonFavorites, id: \.id) { item in
                             exerciseRow(for: item)
@@ -198,20 +209,13 @@ struct ExercisePickerSheet: View {
     }
 
     private func searchSectionTitle(for group: String) -> String {
-        switch group {
-        case "chest": return "胸"
-        case "shoulders": return "肩"
-        case "arms": return "腕"
-        case "back": return "背中"
-        case "legs": return "脚"
-        case "abs": return "体幹"
-        default: return group
-        }
+        MuscleGroupLabel.label(for: group)
     }
 
     @ViewBuilder
     private func exerciseRow(for item: ExerciseCatalog) -> some View {
         let isSelected = selections.contains(item.id)
+        let isJapanese = isJapaneseLocale
         Button {
             if isSelected {
                 selections.remove(item.id)
@@ -226,7 +230,7 @@ struct ExercisePickerSheet: View {
                     .foregroundStyle(isSelected ? color : .secondary)
                     .frame(width: 20)
                 VStack(alignment: .leading) {
-                    Text(item.name)
+                    Text(item.displayName(isJapanese: isJapanese))
                 }
                 .padding(.leading, 8)
             }
@@ -245,5 +249,24 @@ struct ExercisePickerSheet: View {
         // カタカナ→ひらがな、全角→半角に正規化して検索精度を上げる
         let hiragana = trimmed.applyingTransform(.hiraganaToKatakana, reverse: true) ?? trimmed
         return hiragana.applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? hiragana
+    }
+}
+
+private struct ExercisePickerStrings {
+    let isJapanese: Bool
+
+    var navigationTitle: String { isJapanese ? "種目を選択" : "Select Exercises" }
+    var cancelTitle: String { isJapanese ? "キャンセル" : "Cancel" }
+    var doneTitle: String { isJapanese ? "完了" : "Done" }
+    var searchPrompt: String { isJapanese ? "種目名で検索" : "Search exercises" }
+    var muscleGroupPickerTitle: String { isJapanese ? "部位" : "Muscle" }
+    var favoritesTitle: String { isJapanese ? "お気に入り" : "Favorites" }
+    func favoritesSectionTitle(groupName: String?) -> String {
+        guard let groupName else { return favoritesTitle }
+        return isJapanese ? "\(groupName)のお気に入り" : "\(groupName) Favorites"
+    }
+    func exercisesSectionTitle(groupName: String?) -> String {
+        guard let groupName else { return isJapanese ? "種目" : "Exercises" }
+        return isJapanese ? "\(groupName)の種目" : "\(groupName) Exercises"
     }
 }

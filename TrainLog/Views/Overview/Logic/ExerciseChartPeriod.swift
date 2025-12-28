@@ -8,10 +8,11 @@ enum ExerciseChartPeriod: CaseIterable {
     case month
 
     var title: String {
+        let isJapanese = Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
         switch self {
-        case .day: return "日"
-        case .week: return "週"
-        case .month: return "月"
+        case .day: return isJapanese ? "日" : "Day"
+        case .week: return isJapanese ? "週" : "Week"
+        case .month: return isJapanese ? "月" : "Month"
         }
     }
 }

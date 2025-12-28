@@ -11,6 +11,12 @@ struct LogCalendarSection: View {
     @State private var swipeHapticTrigger: Int = 0
     @State private var dayTapHapticTrigger: Int = 0
     @State private var suppressSwipeHaptic = false
+    private var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+    private var strings: LogCalendarStrings {
+        LogCalendarStrings(isJapanese: isJapaneseLocale)
+    }
 
     private var currentMonth: Date {
         months[safe: selectionIndex] ?? LogCalendarSection.startOfMonth(calendar, date: selectedDate)
@@ -18,7 +24,7 @@ struct LogCalendarSection: View {
 
     private let today = LogDateHelper.normalized(Date())
     private let calendar = Calendar.current
-    private let locale = Locale(identifier: "ja_JP")
+    private var locale: Locale { strings.locale }
     private let containerHeight: CGFloat = 312
     private let baseRowHeight: CGFloat = 40
     private let baseSpacing: CGFloat = 10
@@ -106,7 +112,7 @@ struct LogCalendarSection: View {
 
     private var weekdayHeader: some View {
         HStack {
-            ForEach(Locale.japaneseWeekdayInitials, id: \.self) { symbol in
+            ForEach(strings.weekdaySymbols, id: \.self) { symbol in
                 Text(symbol)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -249,7 +255,7 @@ struct LogCalendarSection: View {
     private func monthTitle(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = locale
-        formatter.dateFormat = "yyyy年M月"
+        formatter.dateFormat = strings.monthTitleFormat
         return formatter.string(from: date)
     }
 
@@ -314,6 +320,12 @@ private extension Array {
     }
 }
 
-private extension Locale {
-    static let japaneseWeekdayInitials = ["日", "月", "火", "水", "木", "金", "土"]
+private struct LogCalendarStrings {
+    let isJapanese: Bool
+
+    var locale: Locale { isJapanese ? Locale(identifier: "ja_JP") : Locale(identifier: "en_US") }
+    var monthTitleFormat: String { isJapanese ? "yyyy年M月" : "MMMM yyyy" }
+    var weekdaySymbols: [String] {
+        isJapanese ? ["日", "月", "火", "水", "木", "金", "土"] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    }
 }

@@ -1,9 +1,19 @@
 import SwiftUI
 
+// 種目詳細画面
 struct ExerciseDetailView: View {
     let exercise: ExerciseCatalog
 
     @EnvironmentObject private var favoritesStore: ExerciseFavoritesStore
+    private var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+    private var strings: ExerciseDetailStrings {
+        ExerciseDetailStrings(isJapanese: isJapaneseLocale)
+    }
+    private var displayName: String {
+        exercise.displayName(isJapanese: isJapaneseLocale)
+    }
 
     private var isFavorite: Bool {
         favoritesStore.isFavorite(exercise.id)
@@ -12,48 +22,51 @@ struct ExerciseDetailView: View {
     var body: some View {
         List {
 
-            Section("説明") {
+            Section(strings.descriptionSectionTitle) {
                 Text(descriptionText)
                     .font(.body)
                     .padding(.vertical, 4)
             }
 
-            Section("部位") {
+            Section(strings.muscleSectionTitle) {
                 WrapTagView(tags: [muscleTag])
             }
 
-            Section("器具") {
+            Section(strings.equipmentSectionTitle) {
                 if let equipmentTag {
                     WrapTagView(tags: [equipmentTag])
                 } else {
-                    Text("情報なし")
+                    Text(strings.noInfoText)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("動作") {
+            Section(strings.patternSectionTitle) {
                 if let patternTag {
                     WrapTagView(tags: [patternTag])
                 } else {
-                    Text("情報なし")
+                    Text(strings.noInfoText)
                         .foregroundStyle(.secondary)
                 }
             }
 
             if !exercise.aliases.isEmpty {
-                Section("別名") {
+                Section(strings.aliasSectionTitle) {
                     WrapTagView(tags: exercise.aliases)
                 }
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(exercise.name)
+        .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             HapticButton {
                 favoritesStore.toggle(id: exercise.id)
             } label: {
-                Label(isFavorite ? "お気に入り解除" : "お気に入り", systemImage: isFavorite ? "star.fill" : "star")
+                Label(
+                    isFavorite ? strings.removeFavoriteLabel : strings.addFavoriteLabel,
+                    systemImage: isFavorite ? "star.fill" : "star"
+                )
                     .labelStyle(.iconOnly)
             }
             .tint(isFavorite ? .yellow : .primary)
@@ -63,11 +76,11 @@ struct ExerciseDetailView: View {
     private var descriptionText: String {
         var parts: [String] = []
         let muscle = MuscleGroupLabel.label(for: exercise.muscleGroup)
-        parts.append("\(exercise.name)は\(muscle)を主に鍛える種目です。")
+        parts.append(strings.descriptionLead(name: displayName, muscle: muscle))
         if let pattern = MovementPatternLabel.detail(for: exercise.pattern) {
             parts.append(pattern)
         } else {
-            parts.append("フォームや安全に注意して実施しましょう。")
+            parts.append(strings.descriptionFallback)
         }
         return parts.joined(separator: "\n")
     }
@@ -102,10 +115,17 @@ struct WrapTagView: View {
 
 enum EquipmentLabel {
     static func label(for key: String) -> String? {
-        equipment[key]
+        if isJapaneseLocale {
+            return equipmentJa[key]
+        }
+        return equipmentEn[key]
     }
 
-    private static let equipment: [String: String] = [
+    private static var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+
+    private static let equipmentJa: [String: String] = [
         "barbell": "バーベル",
         "dumbbell": "ダンベル",
         "machine": "マシン",
@@ -113,60 +133,118 @@ enum EquipmentLabel {
         "bodyweight": "自重",
         "band": "チューブ/バンド"
     ]
+
+    private static let equipmentEn: [String: String] = [
+        "barbell": "Barbell",
+        "dumbbell": "Dumbbell",
+        "machine": "Machine",
+        "cable": "Cable",
+        "bodyweight": "Bodyweight",
+        "band": "Band"
+    ]
 }
 
 enum MovementPatternLabel {
     static func label(for key: String) -> String? {
-        patterns[key]?.title
+        if isJapaneseLocale {
+            return patterns[key]?.titleJa
+        }
+        return patterns[key]?.titleEn
     }
 
     static func detail(for key: String) -> String? {
-        patterns[key]?.description
+        if isJapaneseLocale {
+            return patterns[key]?.descriptionJa
+        }
+        return patterns[key]?.descriptionEn
     }
 
     private struct PatternInfo {
-        let title: String
-        let description: String
+        let titleJa: String
+        let titleEn: String
+        let descriptionJa: String
+        let descriptionEn: String
+    }
+
+    private static var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
     }
 
     private static let patterns: [String: PatternInfo] = [
         "horizontal_push": PatternInfo(
-            title: "水平プッシュ",
-            description: "肩甲骨を安定させ、バー/ダンベルを胸の上でコントロールしながら押し出します。"
+            titleJa: "水平プッシュ",
+            titleEn: "Horizontal Push",
+            descriptionJa: "肩甲骨を安定させ、バー/ダンベルを胸の上でコントロールしながら押し出します。",
+            descriptionEn: "Stabilize the scapula and press the bar/dumbbells over the chest with control."
         ),
         "vertical_push": PatternInfo(
-            title: "垂直プッシュ",
-            description: "体幹を締めてバランスを保ち、耳の近くを通すように真上へ押し上げます。"
+            titleJa: "垂直プッシュ",
+            titleEn: "Vertical Push",
+            descriptionJa: "体幹を締めてバランスを保ち、耳の近くを通すように真上へ押し上げます。",
+            descriptionEn: "Brace your core and press straight overhead, keeping the bar path close."
         ),
         "horizontal_pull": PatternInfo(
-            title: "水平プル",
-            description: "肩甲骨を寄せる意識で引き、胸を張ったまま動作を行います。"
+            titleJa: "水平プル",
+            titleEn: "Horizontal Pull",
+            descriptionJa: "肩甲骨を寄せる意識で引き、胸を張ったまま動作を行います。",
+            descriptionEn: "Pull while retracting the scapula, keeping the chest open."
         ),
         "vertical_pull": PatternInfo(
-            title: "垂直プル",
-            description: "肘で引くイメージでバー/グリップを引き下げ、反動を抑えてコントロールします。"
+            titleJa: "垂直プル",
+            titleEn: "Vertical Pull",
+            descriptionJa: "肘で引くイメージでバー/グリップを引き下げ、反動を抑えてコントロールします。",
+            descriptionEn: "Lead with the elbows and control the pull without momentum."
         ),
         "hip_hinge": PatternInfo(
-            title: "ヒンジ",
-            description: "股関節を起点に上体をたたみ、背中を丸めずにお尻を引いて動作します。"
+            titleJa: "ヒンジ",
+            titleEn: "Hip Hinge",
+            descriptionJa: "股関節を起点に上体をたたみ、背中を丸めずにお尻を引いて動作します。",
+            descriptionEn: "Move from the hips, keep the back flat, and push the hips back."
         ),
         "squat": PatternInfo(
-            title: "スクワット",
-            description: "足裏全体で床を踏みしめ、膝と股関節を連動させて上下動します。"
+            titleJa: "スクワット",
+            titleEn: "Squat",
+            descriptionJa: "足裏全体で床を踏みしめ、膝と股関節を連動させて上下動します。",
+            descriptionEn: "Press through the whole foot and move hips and knees together."
         ),
         "lunge": PatternInfo(
-            title: "ランジ",
-            description: "前後の足でバランスをとりながら上下動し、膝が内側に入らないよう意識します。"
+            titleJa: "ランジ",
+            titleEn: "Lunge",
+            descriptionJa: "前後の足でバランスをとりながら上下動し、膝が内側に入らないよう意識します。",
+            descriptionEn: "Balance between front and back legs and keep the knee tracking outward."
         ),
         "carry": PatternInfo(
-            title: "キャリー",
-            description: "体幹を固定し、荷重を安定させたまま歩行/移動を行います。"
+            titleJa: "キャリー",
+            titleEn: "Carry",
+            descriptionJa: "体幹を固定し、荷重を安定させたまま歩行/移動を行います。",
+            descriptionEn: "Keep the core braced and walk while holding a stable load."
         ),
         "rotation": PatternInfo(
-            title: "ローテーション",
-            description: "体幹を主導にツイストを行い、腰を反らせすぎないように注意します。"
+            titleJa: "ローテーション",
+            titleEn: "Rotation",
+            descriptionJa: "体幹を主導にツイストを行い、腰を反らせすぎないように注意します。",
+            descriptionEn: "Rotate through the core and avoid excessive lumbar extension."
         )
     ]
+}
+
+private struct ExerciseDetailStrings {
+    let isJapanese: Bool
+
+    var descriptionSectionTitle: String { isJapanese ? "説明" : "Description" }
+    var muscleSectionTitle: String { isJapanese ? "部位" : "Muscle" }
+    var equipmentSectionTitle: String { isJapanese ? "器具" : "Equipment" }
+    var patternSectionTitle: String { isJapanese ? "動作" : "Pattern" }
+    var aliasSectionTitle: String { isJapanese ? "別名" : "Aliases" }
+    var noInfoText: String { isJapanese ? "情報なし" : "No info" }
+    var addFavoriteLabel: String { isJapanese ? "お気に入り" : "Add Favorite" }
+    var removeFavoriteLabel: String { isJapanese ? "お気に入り解除" : "Remove Favorite" }
+    var descriptionFallback: String {
+        isJapanese ? "フォームや安全に注意して実施しましょう。" : "Focus on form and train safely."
+    }
+    func descriptionLead(name: String, muscle: String) -> String {
+        isJapanese ? "\(name)は\(muscle)を主に鍛える種目です。" : "\(name) primarily targets \(muscle)."
+    }
 }
 
 #Preview {

@@ -2,10 +2,17 @@ import Foundation
 
 enum MuscleGroupLabel {
     static func label(for key: String) -> String {
-        labels[key, default: key]
+        if isJapaneseLocale {
+            return labelsJa[key, default: key]
+        }
+        return labelsEn[key, default: key]
     }
 
-    private static let labels: [String: String] = [
+    private static var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+
+    private static let labelsJa: [String: String] = [
         "favorites": "登録",
         "chest": "胸",
         "back": "背中",
@@ -14,5 +21,16 @@ enum MuscleGroupLabel {
         "legs": "脚",
         "abs": "体幹",
         "other": "その他"
+    ]
+
+    private static let labelsEn: [String: String] = [
+        "favorites": "Favorites",
+        "chest": "Chest",
+        "back": "Back",
+        "shoulders": "Shoulders",
+        "arms": "Arms",
+        "legs": "Legs",
+        "abs": "Core",
+        "other": "Other"
     ]
 }

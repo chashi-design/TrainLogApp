@@ -11,6 +11,34 @@ public struct ExerciseCatalog: Codable, Hashable {
     public let pattern: String     // 動作パターン
 }
 
+public enum ExerciseIdentifier {
+    public static let unknown = "unknown"
+}
+
+
+public extension ExerciseCatalog {
+    func displayName(isJapanese: Bool) -> String {
+        if id == ExerciseIdentifier.unknown {
+            return isJapanese ? "不明" : "Unknown"
+        }
+        if isJapanese { return name }
+        let trimmed = nameEn.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? name : trimmed
+    }
+}
+
+public extension Array where Element == ExerciseCatalog {
+    func displayName(forId id: String, isJapanese: Bool) -> String {
+        if id == ExerciseIdentifier.unknown {
+            return isJapanese ? "不明" : "Unknown"
+        }
+        if let match = first(where: { $0.id == id }) {
+            return match.displayName(isJapanese: isJapanese)
+        }
+        return isJapanese ? "不明" : "Unknown"
+    }
+}
+
 public struct SearchFilters: Sendable {
     public var muscleGroup: Set<String> = []
     public var equipment: Set<String> = []
@@ -181,7 +209,3 @@ public enum ExerciseLoader {
 //
 //  Created by Takanori Hirohashi on 2025/11/03.
 //
-
-
-
-

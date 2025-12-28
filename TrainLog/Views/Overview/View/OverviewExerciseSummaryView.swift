@@ -10,11 +10,20 @@ struct OverviewExerciseSummaryView: View {
     @State private var navigationFeedbackTrigger = 0
     @State private var selectedWeekItem: ExerciseWeekListItem?
     private let calendar = Calendar.appCurrent
-    private let locale = Locale(identifier: "ja_JP")
+    private var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+    private var strings: OverviewExerciseStrings {
+        OverviewExerciseStrings(isJapanese: isJapaneseLocale)
+    }
+    private var locale: Locale { strings.locale }
+    private var displayName: String {
+        exercise.displayName(isJapanese: isJapaneseLocale)
+    }
 
     private var chartData: [(label: String, value: Double)] {
         let series = OverviewMetrics.exerciseChartSeries(
-            for: exercise.name,
+            for: exercise.id,
             workouts: workouts,
             period: chartPeriod,
             calendar: calendar
@@ -26,13 +35,13 @@ struct OverviewExerciseSummaryView: View {
 
     private var hasAnyHistory: Bool {
         workouts.contains { workout in
-            workout.sets.contains { $0.exerciseName == exercise.name }
+            workout.sets.contains { OverviewMetrics.matches(set: $0, exerciseId: exercise.id) }
         }
     }
 
     private var weeklyListData: [ExerciseWeekListItem] {
         OverviewMetrics.weeklyExerciseVolumesAll(
-            for: exercise.name,
+            for: exercise.id,
             workouts: workouts,
             calendar: calendar
         )
@@ -49,8 +58,8 @@ struct OverviewExerciseSummaryView: View {
     var body: some View {
         List {
             if hasAnyHistory {
-                Section("総ボリューム") {
-                    Picker("期間", selection: $chartPeriod) {
+                Section(strings.totalVolumeSectionTitle) {
+                    Picker(strings.periodPickerTitle, selection: $chartPeriod) {
                         ForEach(ExerciseChartPeriod.allCases, id: \.self) { option in
                             Text(option.title).tag(option)
                         }
@@ -65,7 +74,7 @@ struct OverviewExerciseSummaryView: View {
                         animateOnAppear: true,
                         animateOnTrigger: true,
                         animationTrigger: chartPeriod.hashValue,
-                        yValueLabel: "ボリューム(\(weightUnit.unitLabel))",
+                        yValueLabel: strings.volumeLabel(unit: weightUnit.unitLabel),
                         yAxisLabel: weightUnit.unitLabel
                     )
                         .listRowInsets(EdgeInsets())
@@ -74,7 +83,7 @@ struct OverviewExerciseSummaryView: View {
                 }
             }
 
-            Section("週ごとの記録") {
+            Section(strings.weeklyRecordsTitle) {
                 ForEach(weeklyListData) { item in
                     Button {
                         selectedWeekItem = item
@@ -104,18 +113,19 @@ struct OverviewExerciseSummaryView: View {
                     .buttonStyle(.plain)
                 }
                 if weeklyListData.isEmpty {
-                    Text("期間内の記録がありません")
+                    Text(strings.noHistoryText)
                         .foregroundStyle(.secondary)
                 }
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(exercise.name)
+        .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.large)
         .navigationDestination(item: $selectedWeekItem) { item in
             OverviewExerciseWeekDetailView(
                 weekStart: item.start,
-                exerciseName: exercise.name,
+                exerciseId: exercise.id,
+                displayName: displayName,
                 workouts: workouts
             )
         }
@@ -131,8 +141,8 @@ struct OverviewExerciseSummaryView: View {
         let start = calendar.startOfWeek(for: date) ?? date
         let formatter = DateFormatter()
         formatter.locale = locale
-        formatter.dateFormat = "yyyy年MM月dd日"
-        return "\(formatter.string(from: start))週"
+        formatter.dateFormat = strings.weekRangeDateFormat
+        return strings.weekRangeLabel(base: formatter.string(from: start))
     }
 
     private func axisLabel(for date: Date, period: ExerciseChartPeriod) -> String {
@@ -140,13 +150,14 @@ struct OverviewExerciseSummaryView: View {
         formatter.locale = locale
         switch period {
         case .day:
-            formatter.dateFormat = "M/d"
+            formatter.dateFormat = strings.dayAxisDateFormat
         case .week:
-            formatter.dateFormat = "M/d週"
+            formatter.dateFormat = strings.weekAxisDateFormat
         case .month:
-            formatter.dateFormat = "M月"
+            formatter.dateFormat = strings.monthAxisDateFormat
         }
-        return formatter.string(from: date)
+        let base = formatter.string(from: date)
+        return period == .week ? strings.weekAxisLabel(base: base) : base
     }
 }
 
@@ -155,4 +166,27 @@ struct ExerciseWeekListItem: Identifiable, Hashable {
     let start: Date
     let label: String
     let volume: Double
+}
+
+private struct OverviewExerciseStrings {
+    let isJapanese: Bool
+
+    var locale: Locale { isJapanese ? Locale(identifier: "ja_JP") : Locale(identifier: "en_US") }
+    var totalVolumeSectionTitle: String { isJapanese ? "総ボリューム" : "Total Volume" }
+    var periodPickerTitle: String { isJapanese ? "期間" : "Period" }
+    var weeklyRecordsTitle: String { isJapanese ? "週ごとの記録" : "Weekly Records" }
+    var noHistoryText: String { isJapanese ? "期間内の記録がありません" : "No records in this period." }
+    var weekRangeDateFormat: String { isJapanese ? "yyyy年MM月dd日" : "MMM d, yyyy" }
+    var dayAxisDateFormat: String { "M/d" }
+    var weekAxisDateFormat: String { isJapanese ? "M/d" : "MMM d" }
+    var monthAxisDateFormat: String { isJapanese ? "M月" : "MMM" }
+    func weekRangeLabel(base: String) -> String {
+        isJapanese ? "\(base)週" : "Week of \(base)"
+    }
+    func weekAxisLabel(base: String) -> String {
+        isJapanese ? "\(base)週" : "\(base) W"
+    }
+    func volumeLabel(unit: String) -> String {
+        isJapanese ? "ボリューム(\(unit))" : "Volume (\(unit))"
+    }
 }
