@@ -77,16 +77,15 @@ struct SettingsView: View {
                 }
             }
             label: {
-                HStack {
+                HStack(spacing: 12) {
                     Image(systemName: "dumbbell")
                         .foregroundStyle(.primary)
-                        .font(.headline.weight(.semibold))
+                        .font(.body)
                     Text("重量の単位")
-                        .font(.headline)
+                        .font(.body)
                 }
             }
             .pickerStyle(.automatic)
-            .fontWeight(.semibold)
             .onChange(of: weightUnitRaw) { _, _ in
                 unitFeedbackTrigger += 1
             }
@@ -115,12 +114,12 @@ struct SettingsRow: View {
     let iconName: String
 
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
             Image(systemName: iconName)
                 .foregroundStyle(.primary)
-                .font(.headline.weight(.semibold))
+                .font(.body)
             Text(title)
-                .font(.headline)
+                .font(.body)
             Spacer()
             Image(systemName: "chevron.right")
                 .foregroundStyle(.tertiary)
@@ -134,12 +133,12 @@ struct SettingsVersionRow: View {
     let versionText: String
 
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
             Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                 .foregroundStyle(.primary)
-                .font(.headline.weight(.semibold))
+                .font(.body)
             Text("バージョン")
-                .font(.headline)
+                .font(.body)
             Spacer()
             Text(versionText)
                 .foregroundStyle(.secondary)
