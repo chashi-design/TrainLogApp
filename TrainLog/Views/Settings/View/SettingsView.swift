@@ -6,17 +6,17 @@ struct SettingsView: View {
     private var items: [SettingsLinkItem] {
         [
             SettingsLinkItem(
-                title: "お問い合わせ",
+                title: strings.contactTitle,
                 iconName: "questionmark.circle",
                 url: URL(string: "https://forms.gle/zgHhoZLDLA7Y5Dmu6")!
             ),
             SettingsLinkItem(
-                title: "利用規約",
+                title: strings.termsTitle,
                 iconName: "text.document",
                 url: termsURL
             ),
             SettingsLinkItem(
-                title: "プライバシーポリシー",
+                title: strings.privacyTitle,
                 iconName: "lock",
                 url: privacyPolicyURL
             )
@@ -31,6 +31,10 @@ struct SettingsView: View {
 
     private var isJapaneseLocale: Bool {
         Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+
+    private var strings: SettingsStrings {
+        SettingsStrings(isJapanese: isJapaneseLocale)
     }
 
     private var termsURL: URL {
@@ -50,7 +54,7 @@ struct SettingsView: View {
         }
         .contentMargins(.top, 4, for: .scrollContent)
         .listStyle(.insetGrouped)
-        .navigationTitle("設定")
+        .navigationTitle(strings.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -60,7 +64,7 @@ struct SettingsView: View {
                 } label: {
                     Image(systemName: "xmark")
                 }
-                .accessibilityLabel("閉じる")
+                .accessibilityLabel(strings.closeLabel)
                 .sensoryFeedback(.impact(weight: .light), trigger: closeFeedbackTrigger)
             }
         }
@@ -81,7 +85,7 @@ struct SettingsView: View {
     }
 
     private var unitSection: some View {
-        Section("アプリ設定") {
+        Section(strings.appSettingsSectionTitle) {
             Picker(selection: $weightUnitRaw) {
                 ForEach(WeightUnit.allCases) { unit in
                     Text(unit.unitLabel).tag(unit.rawValue)
@@ -92,7 +96,7 @@ struct SettingsView: View {
                     Image(systemName: "dumbbell")
                         .foregroundStyle(.primary)
                         .font(.body)
-                    Text("重量の単位")
+                    Text(strings.weightUnitTitle)
                         .font(.body)
                 }
             }
@@ -105,7 +109,7 @@ struct SettingsView: View {
     }
 
     private var linksSection: some View {
-        Section("その他") {
+        Section(strings.otherSectionTitle) {
             ForEach(items) { item in
                 Button {
                     selectedItem = item
@@ -115,7 +119,7 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
             }
 
-            SettingsVersionRow(versionText: appVersionText)
+            SettingsVersionRow(title: strings.versionTitle, versionText: appVersionText)
         }
     }
 }
@@ -141,6 +145,7 @@ struct SettingsRow: View {
 }
 
 struct SettingsVersionRow: View {
+    let title: String
     let versionText: String
 
     var body: some View {
@@ -148,7 +153,7 @@ struct SettingsVersionRow: View {
             Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                 .foregroundStyle(.primary)
                 .font(.body)
-            Text("バージョン")
+            Text(title)
                 .font(.body)
             Spacer()
             Text(versionText)
@@ -166,6 +171,19 @@ struct SettingsLinkItem: Identifiable, Hashable {
     var id: URL { url }
 }
 
+private struct SettingsStrings {
+    let isJapanese: Bool
+
+    var navigationTitle: String { isJapanese ? "設定" : "Settings" }
+    var closeLabel: String { isJapanese ? "閉じる" : "Close" }
+    var appSettingsSectionTitle: String { isJapanese ? "アプリ設定" : "App Settings" }
+    var weightUnitTitle: String { isJapanese ? "重量の単位" : "Weight Unit" }
+    var otherSectionTitle: String { isJapanese ? "その他" : "Other" }
+    var versionTitle: String { isJapanese ? "バージョン" : "Version" }
+    var contactTitle: String { isJapanese ? "お問い合わせ" : "Contact" }
+    var termsTitle: String { isJapanese ? "利用規約" : "Terms of Service" }
+    var privacyTitle: String { isJapanese ? "プライバシーポリシー" : "Privacy Policy" }
+}
 #Preview {
     NavigationStack {
         SettingsView()

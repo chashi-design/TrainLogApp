@@ -45,8 +45,8 @@ final class LogViewModel: ObservableObject {
         draftRevision += 1
     }
 
-    func exerciseName(forID id: String) -> String? {
-        exercisesCatalog.first(where: { $0.id == id })?.name
+    func displayName(for exerciseId: String, isJapanese: Bool) -> String {
+        exercisesCatalog.displayName(forId: exerciseId, isJapanese: isJapanese)
     }
 
     func draftEntry(with id: UUID) -> DraftExerciseEntry? {
@@ -68,6 +68,10 @@ final class LogViewModel: ObservableObject {
                 }
             }
             return
+        }
+
+        for set in savedSets {
+            context.insert(set)
         }
 
         if let existing = findWorkout(on: normalizedDate, context: context) {
@@ -123,18 +127,21 @@ final class LogViewModel: ObservableObject {
 
         if let workout = findWorkout(on: normalizedNewDate, context: context) {
             let locale = Locale.current
-            let grouped = Dictionary(grouping: workout.sets, by: { $0.exerciseName })
-            let mapped = grouped.map { exerciseName, sets -> DraftExerciseEntry in
+            let grouped = Dictionary(grouping: workout.sets, by: { $0.exerciseId })
+            let mapped = grouped.map { exerciseId, sets -> DraftExerciseEntry in
                 let rows: [DraftSetRow] = sets.map { set -> DraftSetRow in
                     let weightText = DraftSetRow.formattedWeightText(set.weight, unit: unit, locale: locale)
                     return DraftSetRow(weightText: weightText, repsText: String(set.reps))
                 }
-                var entry = DraftExerciseEntry(exerciseName: exerciseName, defaultSetCount: 0)
+                var entry = DraftExerciseEntry(exerciseId: exerciseId, defaultSetCount: 0)
                 entry.sets = rows
                 return entry
             }
 
-            draftExercises = mapped.sorted { $0.exerciseName < $1.exerciseName }
+            let isJapanese = Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+            draftExercises = mapped.sorted {
+                displayName(for: $0.exerciseId, isJapanese: isJapanese) < displayName(for: $1.exerciseId, isJapanese: isJapanese)
+            }
         } else {
             draftExercises = []
         }
@@ -142,8 +149,8 @@ final class LogViewModel: ObservableObject {
         lastSyncedDate = normalizedNewDate
     }
 
-    func appendExercise(_ name: String, initialSetCount: Int = 2) {
-        let entry = DraftExerciseEntry(exerciseName: name, defaultSetCount: initialSetCount)
+    func appendExercise(_ id: String, initialSetCount: Int = 2) {
+        let entry = DraftExerciseEntry(exerciseId: id, defaultSetCount: initialSetCount)
         draftExercises.append(entry)
         draftRevision += 1
     }
@@ -193,7 +200,7 @@ final class LogViewModel: ObservableObject {
 
     private func buildExerciseSets(unit: WeightUnit) -> [ExerciseSet] {
         let structured = draftExercises.flatMap { entry in
-            entry.exerciseSets(unit: unit)
+            return entry.exerciseSets(unit: unit, exerciseId: entry.exerciseId)
         }
 
         return structured
@@ -202,16 +209,16 @@ final class LogViewModel: ObservableObject {
 
 struct DraftExerciseEntry: Identifiable {
     let id = UUID()
-    var exerciseName: String
+    var exerciseId: String
     var sets: [DraftSetRow]
 
-    init(exerciseName: String, defaultSetCount: Int = 2) {
-        self.exerciseName = exerciseName
+    init(exerciseId: String, defaultSetCount: Int = 2) {
+        self.exerciseId = exerciseId
         self.sets = (0..<defaultSetCount).map { _ in DraftSetRow() }
     }
 
-    func exerciseSets(unit: WeightUnit) -> [ExerciseSet] {
-        sets.compactMap { $0.toExerciseSet(exerciseName: exerciseName, unit: unit) }
+    func exerciseSets(unit: WeightUnit, exerciseId: String) -> [ExerciseSet] {
+        return sets.compactMap { $0.toExerciseSet(exerciseId: exerciseId, unit: unit) }
     }
 
     var completedSetCount: Int {
@@ -224,10 +231,10 @@ struct DraftSetRow: Identifiable {
     var weightText: String = ""
     var repsText: String = ""
 
-    func toExerciseSet(exerciseName: String, unit: WeightUnit) -> ExerciseSet? {
+    func toExerciseSet(exerciseId: String, unit: WeightUnit) -> ExerciseSet? {
         guard let weightInput = Double(weightText), let reps = Int(repsText) else { return nil }
         let weightKg = unit.kgValue(fromDisplay: weightInput)
-        return ExerciseSet(exerciseName: exerciseName, weight: weightKg, reps: reps)
+        return ExerciseSet(exerciseId: exerciseId, weight: weightKg, reps: reps)
     }
 
     var isValid: Bool {
@@ -237,13 +244,4 @@ struct DraftSetRow: Identifiable {
     static func formattedWeightText(_ weight: Double, unit: WeightUnit, locale: Locale) -> String {
         unit.formattedValue(fromKg: weight, locale: locale, maximumFractionDigits: 3)
     }
-}
-
-// まだDBに保存していない「入力中のセット」を表すための一時的な型
-struct DraftSet: Identifiable {
-    let id = UUID()
-    var exerciseName: String
-    var weight: Double
-    var reps: Int
-    var rpe: Double?
 }

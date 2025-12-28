@@ -7,24 +7,32 @@ struct ContentView: View {
     @StateObject private var favoritesStore = ExerciseFavoritesStore()
     @AppStorage(WeightUnit.storageKey) private var weightUnitRaw = WeightUnit.kg.rawValue
 
+    private var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+
+    private var strings: ContentStrings {
+        ContentStrings(isJapanese: isJapaneseLocale)
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
             OverviewTabView()
                 .tag(Tab.summary)
                 .tabItem {
-                    Label("アクティビティ", systemImage: "chart.bar.fill")
+                    Label(strings.activityTabTitle, systemImage: "chart.bar.fill")
                 }
 
             LogView()
                 .tag(Tab.memo)
                 .tabItem {
-                    Label("メモ", systemImage: "calendar.badge.plus")
+                    Label(strings.logTabTitle, systemImage: "calendar.badge.plus")
                 }
             
             ExerciseTabView()
                 .tag(Tab.exercises)
                 .tabItem {
-                    Label("種目", systemImage: "list.bullet")
+                    Label(strings.exercisesTabTitle, systemImage: "list.bullet")
                 }
         }
         .onChange(of: selectedTab) { _, _ in
@@ -40,6 +48,14 @@ private enum Tab {
     case summary
     case memo
     case exercises
+}
+
+private struct ContentStrings {
+    let isJapanese: Bool
+
+    var activityTabTitle: String { isJapanese ? "アクティビティ" : "Activity" }
+    var logTabTitle: String { isJapanese ? "メモ" : "Log" }
+    var exercisesTabTitle: String { isJapanese ? "種目" : "Exercises" }
 }
 
 #Preview {

@@ -12,6 +12,12 @@ struct SetEditorView: View {
     @State private var addSetHapticTrigger = 0
     @State private var deleteSetHapticTrigger = 0
     @FocusState private var focusedField: Field?
+    private var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+    private var strings: SetEditorStrings {
+        SetEditorStrings(isJapanese: isJapaneseLocale)
+    }
  
     private enum Field: Hashable {
         case weight(UUID)
@@ -29,7 +35,7 @@ struct SetEditorView: View {
                             .foregroundStyle(.secondary)
 
                         TextField(
-                            "重量(\(weightUnit.unitLabel))",
+                            strings.weightPlaceholder(unit: weightUnit.unitLabel),
                             text: Binding(
                                 get: { viewModel.weightText(exerciseID: exerciseID, setID: set.id) },
                                 set: { viewModel.updateSetRow(exerciseID: exerciseID, setID: set.id, weightText: $0, repsText: viewModel.repsText(exerciseID: exerciseID, setID: set.id)) }
@@ -48,7 +54,7 @@ struct SetEditorView: View {
                         }
 
                         TextField(
-                            "レップ数",
+                            strings.repsPlaceholder,
                             text: Binding(
                                 get: { viewModel.repsText(exerciseID: exerciseID, setID: set.id) },
                                 set: { viewModel.updateSetRow(exerciseID: exerciseID, setID: set.id, weightText: viewModel.weightText(exerciseID: exerciseID, setID: set.id), repsText: $0) }
@@ -85,19 +91,19 @@ struct SetEditorView: View {
                     viewModel.addSetRow(to: exerciseID)
                     addSetHapticTrigger += 1
                 } label: {
-                    Label("セットを追加", systemImage: "plus.circle.fill")
+                    Label(strings.addSetTitle, systemImage: "plus.circle.fill")
                 }
                 .sensoryFeedback(.impact(weight: .light), trigger: addSetHapticTrigger)
 
                 if let metrics = metrics(for: entry, context: context, selectedDate: viewModel.selectedDate, unit: weightUnit) {
-                    Section("筋ボリューム推移") {
+                    Section(strings.volumeTrendSectionTitle) {
                         ExerciseVolumeChart(
                             data: metrics.volumeChartData,
                             barColor: muscleGroupColor(for: entry),
                             animateOnAppear: false,
                             animateOnTrigger: false,
                             animationTrigger: viewModel.draftRevision,
-                            yValueLabel: "ボリューム(\(weightUnit.unitLabel))",
+                            yValueLabel: strings.volumeLabel(unit: weightUnit.unitLabel),
                             yAxisLabel: weightUnit.unitLabel
                         )
                         .listRowInsets(EdgeInsets())
@@ -105,26 +111,31 @@ struct SetEditorView: View {
                         .listRowBackground(Color.clear)
                     }
                 } else {
-                    Section("筋ボリュームの推移") {
-                        Text("有効なセットを入力すると指標を表示します")
+                    Section(strings.volumeTrendSectionTitle) {
+                        Text(strings.volumeTrendEmptyMessage)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
             .contentMargins(.top, 4, for: .scrollContent)
+            .onChange(of: viewModel.draftRevision) { _, _ in
+                if !viewModel.isSyncingDrafts {
+                    viewModel.saveWorkout(context: context, unit: weightUnit)
+                }
+            }
             .onChange(of: focusedField) { _, newValue in
                 if newValue != nil {
                     fieldHapticTrigger += 1
                 }
             }
             .sensoryFeedback(.impact(weight: .light), trigger: fieldHapticTrigger)
-            .navigationTitle(entry.exerciseName)
+            .navigationTitle(displayName(for: entry.exerciseId))
             .navigationBarTitleDisplayMode(.inline)
         } else {
             VStack(spacing: 12) {
-                Text("編集対象が見つかりませんでした")
+                Text(strings.missingEntryMessage)
                     .foregroundStyle(.secondary)
-                Button("閉じる") { dismiss() }
+                Button(strings.closeTitle) { dismiss() }
             }
             .padding()
         }
@@ -152,7 +163,7 @@ private extension SetEditorView {
         let calendar = Calendar.appCurrent
         let normalizedDate = calendar.startOfDay(for: selectedDate)
         let history = previousVolumes(
-            exerciseName: entry.exerciseName,
+            exerciseId: entry.exerciseId,
             before: normalizedDate,
             context: context,
             unit: unit
@@ -167,7 +178,7 @@ private extension SetEditorView {
     }
 
     func previousVolumes(
-        exerciseName: String,
+        exerciseId: String,
         before date: Date,
         context: ModelContext,
         unit: WeightUnit
@@ -183,7 +194,7 @@ private extension SetEditorView {
 
         for workout in workouts {
             let volume = workout.sets
-                .filter { $0.exerciseName == exerciseName }
+                .filter { $0.exerciseId == exerciseId }
                 .reduce(0.0) { $0 + $1.volume }
             guard volume > 0 else { continue }
             volumes.append((date: workout.date, volume: unit.displayValue(fromKg: volume)))
@@ -194,13 +205,40 @@ private extension SetEditorView {
 
     func axisLabel(for date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "M/d"
+        formatter.locale = strings.locale
+        formatter.dateFormat = strings.axisDateFormat
         return formatter.string(from: date)
     }
 
     func muscleGroupColor(for entry: DraftExerciseEntry) -> Color {
-        let key = viewModel.exercisesCatalog.first(where: { $0.name == entry.exerciseName })?.muscleGroup ?? "other"
+        let key = viewModel.exercisesCatalog.first(where: { $0.id == entry.exerciseId })?.muscleGroup ?? "other"
         return MuscleGroupColor.color(for: key)
+    }
+
+    func displayName(for exerciseId: String) -> String {
+        viewModel.displayName(for: exerciseId, isJapanese: isJapaneseLocale)
+    }
+}
+
+private struct SetEditorStrings {
+    let isJapanese: Bool
+
+    var locale: Locale { isJapanese ? Locale(identifier: "ja_JP") : Locale(identifier: "en_US") }
+    var repsPlaceholder: String { isJapanese ? "レップ数" : "Reps" }
+    var addSetTitle: String { isJapanese ? "セットを追加" : "Add Set" }
+    var volumeTrendSectionTitle: String { isJapanese ? "筋ボリューム推移" : "Volume Trend" }
+    var volumeTrendEmptyMessage: String {
+        isJapanese ? "有効なセットを入力すると指標を表示します" : "Enter valid sets to show metrics."
+    }
+    var missingEntryMessage: String {
+        isJapanese ? "編集対象が見つかりませんでした" : "Entry not found."
+    }
+    var closeTitle: String { isJapanese ? "閉じる" : "Close" }
+    var axisDateFormat: String { "M/d" }
+    func weightPlaceholder(unit: String) -> String {
+        isJapanese ? "重量(\(unit))" : "Weight (\(unit))"
+    }
+    func volumeLabel(unit: String) -> String {
+        isJapanese ? "ボリューム(\(unit))" : "Volume (\(unit))"
     }
 }

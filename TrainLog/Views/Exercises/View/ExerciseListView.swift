@@ -7,6 +7,12 @@ struct ExerciseListView: View {
     let exercises: [ExerciseCatalog]
 
     @EnvironmentObject private var favoritesStore: ExerciseFavoritesStore
+    private var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+    private var strings: ExerciseListStrings {
+        ExerciseListStrings(isJapanese: isJapaneseLocale)
+    }
 
     var body: some View {
         List {
@@ -24,7 +30,9 @@ struct ExerciseListView: View {
                         favoritesStore.toggle(id: exercise.id)
                     } label: {
                         Label(
-                            favoritesStore.isFavorite(exercise.id) ? "お気に入り解除" : "お気に入り",
+                            favoritesStore.isFavorite(exercise.id)
+                                ? strings.removeFavoriteLabel
+                                : strings.addFavoriteLabel,
                             systemImage: favoritesStore.isFavorite(exercise.id) ? "star.slash" : "star"
                         )
                     }
@@ -37,11 +45,11 @@ struct ExerciseListView: View {
                         .foregroundStyle(.tertiary)
                         .imageScale(.large)
                         .font(.system(size: 32, weight: .semibold))
-                    Text("お気に入り種目なし")
+                    Text(strings.emptyTitle)
                         .font(.headline)
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.center)
-                    Text("お気に入り登録すると、メモ入力のときに種目を簡単に選べます。カテゴリから選んで登録しましょう。")
+                    Text(strings.emptyMessage)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -58,11 +66,14 @@ struct ExerciseListView: View {
 struct ExerciseRow: View {
     let exercise: ExerciseCatalog
     let isFavorite: Bool
+    private var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
 
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(exercise.name)
+                Text(exercise.displayName(isJapanese: isJapaneseLocale))
                     .font(.body)
             }
             Spacer()
@@ -72,6 +83,19 @@ struct ExerciseRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+private struct ExerciseListStrings {
+    let isJapanese: Bool
+
+    var addFavoriteLabel: String { isJapanese ? "お気に入り" : "Add Favorite" }
+    var removeFavoriteLabel: String { isJapanese ? "お気に入り解除" : "Remove Favorite" }
+    var emptyTitle: String { isJapanese ? "お気に入り種目なし" : "No Favorites" }
+    var emptyMessage: String {
+        isJapanese
+            ? "お気に入り登録すると、メモ入力のときに種目を簡単に選べます。カテゴリから選んで登録しましょう。"
+            : "Add favorites to quickly pick exercises when logging. Choose from categories to save them."
     }
 }
 

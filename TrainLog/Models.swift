@@ -38,7 +38,7 @@ final class Workout {
 
 // MARK: - ExerciseSet モデル
 // 1つの種目における1セット分の記録を表すモデル。
-// exerciseName: 種目名（例: ベンチプレス）
+// exerciseId: 種目ID（exercises.json の id）
 // weight: 使用した重量(kg)
 // reps: 挙上回数
 // rpe: 主観的なきつさ（RPEスケール、任意）
@@ -46,7 +46,7 @@ final class Workout {
 @Model
 final class ExerciseSet {
     @Attribute(.unique) var id: UUID
-    var exerciseName: String
+    var exerciseId: String
     var weight: Double
     var reps: Int
     var rpe: Double?
@@ -56,14 +56,14 @@ final class ExerciseSet {
     // 種目名・重量・回数・RPEを指定できます。
     // createdAtはデフォルトで現在時刻が入ります。
     init(
-        exerciseName: String,
+        exerciseId: String,
         weight: Double,
         reps: Int,
         rpe: Double? = nil,
         createdAt: Date = .now
     ) {
         self.id = UUID()
-        self.exerciseName = exerciseName
+        self.exerciseId = exerciseId
         self.weight = weight
         self.reps = reps
         self.rpe = rpe

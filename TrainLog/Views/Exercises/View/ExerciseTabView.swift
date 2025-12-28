@@ -6,17 +6,26 @@ struct ExerciseTabView: View {
     @State private var loadFailed = false
     @State private var navigationFeedbackTrigger = 0
     @State private var path: [ExerciseRoute] = []
+    private var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+    private var strings: ExerciseTabStrings {
+        ExerciseTabStrings(isJapanese: isJapaneseLocale)
+    }
 
     private let muscleGroupOrder = ["chest", "shoulders", "arms", "back", "legs", "abs", "other"]
 
     private var categories: [ExerciseCategory] {
+        let isJapanese = isJapaneseLocale
         let grouped = Dictionary(grouping: exercises, by: { $0.muscleGroup })
         let raw = grouped.map { key, value in
             ExerciseCategory(
                 id: key,
                 title: MuscleGroupLabel.label(for: key),
                 color: MuscleGroupColor.color(for: key),
-                exercises: value.sorted { $0.name < $1.name }
+                exercises: value.sorted {
+                    displayName($0, isJapanese: isJapanese) < displayName($1, isJapanese: isJapanese)
+                }
             )
         }
         return raw.sorted { lhs, rhs in
@@ -30,8 +39,9 @@ struct ExerciseTabView: View {
     }
 
     private var favoriteExercises: [ExerciseCatalog] {
-        exercises.filter { favoritesStore.isFavorite($0.id) }
-            .sorted { $0.name < $1.name }
+        let isJapanese = isJapaneseLocale
+        return exercises.filter { favoritesStore.isFavorite($0.id) }
+            .sorted { displayName($0, isJapanese: isJapanese) < displayName($1, isJapanese: isJapanese) }
     }
 
     var body: some View {
@@ -42,11 +52,11 @@ struct ExerciseTabView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "star.fill")
                                 .foregroundStyle(.yellow)
-                            Text("お気に入り")
+                            Text(strings.favoritesTitle)
                                 .font(.body)
                                 .foregroundStyle(.primary)
                             Spacer()
-                            Text("\(favoriteExercises.count)種目")
+                            Text(strings.exerciseCountText(favoriteExercises.count))
                                 .font(.body)
                                 .foregroundStyle(.secondary)
                         }
@@ -56,7 +66,7 @@ struct ExerciseTabView: View {
                     }
                 }
 
-                Section("カテゴリ") {
+                Section(strings.categorySectionTitle) {
                     ForEach(categories) { category in
                         NavigationLink(value: ExerciseRoute.category(category.id)) {
                             HStack(spacing: 12) {
@@ -65,7 +75,7 @@ struct ExerciseTabView: View {
                                 Text(category.title)
                                     .font(.body)
                                 Spacer()
-                                Text("\(category.exercises.count)種目")
+                                Text(strings.exerciseCountText(category.exercises.count))
                                     .font(.body)
                                     .foregroundStyle(.secondary)
                             }
@@ -75,21 +85,21 @@ struct ExerciseTabView: View {
                         }
                     }
                     if categories.isEmpty {
-                        Text("種目データがありません")
+                        Text(strings.noExerciseData)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-            .navigationTitle("種目")
+            .navigationTitle(strings.navigationTitle)
             .task { loadExercises() }
-            .alert("種目リストの読み込みに失敗しました", isPresented: $loadFailed) {
+            .alert(strings.loadFailedMessage, isPresented: $loadFailed) {
                 Button("OK", role: .cancel) {}
             }
             .animation(.default, value: favoriteExercises)
             .navigationDestination(for: ExerciseRoute.self) { route in
                 switch route {
                 case .favorites:
-                    ExerciseListView(title: "お気に入り", exercises: favoriteExercises)
+                    ExerciseListView(title: strings.favoritesTitle, exercises: favoriteExercises)
                 case .category(let id):
                     if let category = categories.first(where: { $0.id == id }) {
                         ExerciseListView(title: category.title, exercises: category.exercises)
@@ -117,6 +127,10 @@ struct ExerciseTabView: View {
             loadFailed = true
         }
     }
+
+    private func displayName(_ exercise: ExerciseCatalog, isJapanese: Bool) -> String {
+        exercise.displayName(isJapanese: isJapanese)
+    }
 }
 
 struct ExerciseCategory: Identifiable {
@@ -130,6 +144,21 @@ enum ExerciseRoute: Hashable {
     case favorites
     case category(String)
     case detail(ExerciseCatalog)
+}
+
+private struct ExerciseTabStrings {
+    let isJapanese: Bool
+
+    var favoritesTitle: String { isJapanese ? "お気に入り" : "Favorites" }
+    var categorySectionTitle: String { isJapanese ? "カテゴリ" : "Categories" }
+    var noExerciseData: String { isJapanese ? "種目データがありません" : "No exercise data available." }
+    var navigationTitle: String { isJapanese ? "種目" : "Exercises" }
+    var loadFailedMessage: String {
+        isJapanese ? "種目リストの読み込みに失敗しました" : "Failed to load exercise list."
+    }
+    func exerciseCountText(_ count: Int) -> String {
+        isJapanese ? "\(count)種目" : "\(count) exercises"
+    }
 }
 
 #Preview {

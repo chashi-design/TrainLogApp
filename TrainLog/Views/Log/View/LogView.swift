@@ -8,6 +8,7 @@ struct LogView: View {
     @StateObject private var viewModel = LogViewModel()
     @EnvironmentObject private var favoritesStore: ExerciseFavoritesStore
     @Environment(\.weightUnit) private var weightUnit
+    @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \Workout.date, order: .reverse) private var workoutsQuery: [Workout]
     private var workouts: [Workout] { workoutsQuery }
     @State private var isShowingExercisePicker = false
@@ -18,15 +19,22 @@ struct LogView: View {
     @State private var navigationFeedbackTrigger = 0
     @State private var path: [LogRoute] = []
 
+    private var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+    private var strings: LogStrings {
+        LogStrings(isJapanese: isJapaneseLocale)
+    }
+
     private enum LogRoute: Hashable {
         case edit(UUID)
     }
 
     private var selectedDateTitle: String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "MM月dd日"
-        return "\(formatter.string(from: viewModel.selectedDate))のトレーニング種目"
+        formatter.locale = strings.locale
+        formatter.dateFormat = strings.selectedDateFormat
+        return strings.selectedDateTitle(dateText: formatter.string(from: viewModel.selectedDate))
     }
 
     var body: some View {
@@ -47,7 +55,7 @@ struct LogView: View {
                     hideKeyboard()
                 }
             )
-            .navigationTitle("メモ")
+            .navigationTitle(strings.navigationTitle)
                 .task {
                     await viewModel.loadExercises()
                     viewModel.syncDraftsForSelectedDate(context: context, unit: weightUnit)
@@ -63,9 +71,7 @@ struct LogView: View {
                     onComplete: {
                         let ids = pickerSelections
                         for id in ids {
-                            if let name = viewModel.exerciseName(forID: id) {
-                                viewModel.appendExercise(name)
-                            }
+                            viewModel.appendExercise(id)
                         }
                         pickerSelections.removeAll()
                         isShowingExercisePicker = false
@@ -81,6 +87,11 @@ struct LogView: View {
             }
             .onReceive(viewModel.$draftRevision.dropFirst()) { _ in
                 if !viewModel.isSyncingDrafts {
+                    viewModel.saveWorkout(context: context, unit: weightUnit)
+                }
+            }
+            .onChange(of: scenePhase) { _, newValue in
+                if newValue == .background && !viewModel.isSyncingDrafts {
                     viewModel.saveWorkout(context: context, unit: weightUnit)
                 }
             }
@@ -103,7 +114,7 @@ struct LogView: View {
                         HapticButton {
                             viewModel.selectedDate = LogDateHelper.normalized(Date())
                         } label: {
-                            Text("今日")
+                            Text(strings.todayLabel)
                         }
                     }
                 }
@@ -119,19 +130,19 @@ struct LogView: View {
                     }
                 }
             }
-            .alert("選択した種目を削除しますか？", isPresented: $isShowingDeleteAlert) {
-                Button("削除", role: .destructive) {
+            .alert(strings.deleteAlertTitle, isPresented: $isShowingDeleteAlert) {
+                Button(strings.deleteActionTitle, role: .destructive) {
                     selectedEntriesForDeletion.forEach { id in
                         viewModel.removeDraftExercise(id: id)
                     }
                     selectedEntriesForDeletion.removeAll()
                     editMode = .inactive
                 }
-                Button("キャンセル", role: .cancel) {
+                Button(strings.cancelActionTitle, role: .cancel) {
                     isShowingDeleteAlert = false
                 }
             } message: {
-                Text("\(selectedEntriesForDeletion.count)件の種目を削除します。")
+                Text(strings.deleteAlertMessage(count: selectedEntriesForDeletion.count))
             }
             .navigationDestination(for: LogRoute.self) { route in
                 switch route {
@@ -157,7 +168,7 @@ struct LogView: View {
         let calendar = Calendar.appCurrent
         let selectedDay = calendar.startOfDay(for: viewModel.selectedDate)
         let draftGroups = Set(viewModel.draftExercises.map { entry in
-            exercisesSnapshot.first(where: { $0.name == entry.exerciseName })?.muscleGroup ?? "other"
+            exercisesSnapshot.first(where: { $0.id == entry.exerciseId })?.muscleGroup ?? "other"
         })
 
         if draftGroups.isEmpty {
@@ -169,8 +180,8 @@ struct LogView: View {
         return dots
     }
     
-    private func muscleColor(for name: String) -> Color {
-        guard let exercise = viewModel.exercisesCatalog.first(where: { $0.name == name }) else {
+    private func muscleColor(for id: String) -> Color {
+        guard let exercise = viewModel.exercisesCatalog.first(where: { $0.id == id }) else {
             return .gray
         }
         return MuscleGroupColor.color(for: exercise.muscleGroup)
@@ -186,7 +197,7 @@ struct LogView: View {
     private var exerciseSection: some View {
         Section(selectedDateTitle) {
             if viewModel.draftExercises.isEmpty {
-                Text("まだ種目が追加されていません。\n右上の \"＋\" から追加してください。")
+                Text(strings.emptyStateMessage)
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(viewModel.draftExercises) { entry in
@@ -200,14 +211,14 @@ struct LogView: View {
                                     .foregroundStyle(isSelected ? Color.accentColor : .secondary)
 
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text(entry.exerciseName)
+                                    Text(displayName(for: entry.exerciseId))
                                         .font(.headline)
                                     let weight = formattedWeight(totalWeight(for: entry, unit: weightUnit))
                                     Group {
                                         if entry.completedSetCount == 0 {
-                                            Text("\(entry.completedSetCount)セット")
+                                            Text(strings.setCountText(entry.completedSetCount))
                                         } else {
-                                            Text("\(entry.completedSetCount)セット (\(weight)\(weightUnit.unitLabel))")
+                                            Text(strings.setCountWithWeightText(entry.completedSetCount, weight: weight, unit: weightUnit.unitLabel))
                                         }
                                     }
                                     .font(.subheadline)
@@ -223,16 +234,16 @@ struct LogView: View {
                             NavigationLink(value: LogRoute.edit(entry.id)) {
                                 HStack(spacing: 16) {
                                     Image(systemName: "circle.fill")
-                                        .foregroundStyle(muscleColor(for: entry.exerciseName))
+                                        .foregroundStyle(muscleColor(for: entry.exerciseId))
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(entry.exerciseName)
+                                        Text(displayName(for: entry.exerciseId))
                                             .font(.headline)
                                         let weight = formattedWeight(totalWeight(for: entry, unit: weightUnit))
                                         Group {
                                             if entry.completedSetCount == 0 {
-                                                Text("\(entry.completedSetCount)セット")
+                                                Text(strings.setCountText(entry.completedSetCount))
                                             } else {
-                                                Text("\(entry.completedSetCount)セット (\(weight)\(weightUnit.unitLabel))")
+                                                Text(strings.setCountWithWeightText(entry.completedSetCount, weight: weight, unit: weightUnit.unitLabel))
                                             }
                                         }
                                         .font(.subheadline)
@@ -273,6 +284,39 @@ struct LogView: View {
     private func formattedWeight(_ weight: Double) -> String {
         DraftSetRow.formattedWeightText(weight, unit: weightUnit, locale: Locale.current)
     }
+
+    private func displayName(for exerciseId: String) -> String {
+        viewModel.displayName(for: exerciseId, isJapanese: isJapaneseLocale)
+    }
+}
+
+private struct LogStrings {
+    let isJapanese: Bool
+
+    var navigationTitle: String { isJapanese ? "メモ" : "Log" }
+    var todayLabel: String { isJapanese ? "今日" : "Today" }
+    var deleteAlertTitle: String { isJapanese ? "選択した種目を削除しますか？" : "Delete selected exercises?" }
+    var deleteActionTitle: String { isJapanese ? "削除" : "Delete" }
+    var cancelActionTitle: String { isJapanese ? "キャンセル" : "Cancel" }
+    var emptyStateMessage: String {
+        isJapanese
+            ? "まだ種目が追加されていません。\n右上の \"＋\" から追加してください。"
+            : "No exercises yet.\nTap the + in the top right to add."
+    }
+    var locale: Locale { isJapanese ? Locale(identifier: "ja_JP") : Locale(identifier: "en_US") }
+    var selectedDateFormat: String { isJapanese ? "MM月dd日" : "MMM d" }
+    func selectedDateTitle(dateText: String) -> String {
+        isJapanese ? "\(dateText)のトレーニング種目" : "Exercises on \(dateText)"
+    }
+    func deleteAlertMessage(count: Int) -> String {
+        isJapanese ? "\(count)件の種目を削除します。" : "Delete \(count) exercises."
+    }
+    func setCountText(_ count: Int) -> String {
+        isJapanese ? "\(count)セット" : "\(count) sets"
+    }
+    func setCountWithWeightText(_ count: Int, weight: String, unit: String) -> String {
+        isJapanese ? "\(count)セット (\(weight)\(unit))" : "\(count) sets (\(weight)\(unit))"
+    }
 }
 
 #Preview {
@@ -290,15 +334,13 @@ enum WorkoutDotsBuilder {
         exercises: [ExerciseCatalog]
     ) -> [Date: [Color]] {
         let calendar = Calendar.current
-        let exerciseLookup = Dictionary(uniqueKeysWithValues: exercises.map { ($0.name, $0.muscleGroup) })
+        let exerciseLookup = Dictionary(uniqueKeysWithValues: exercises.map { ($0.id, $0.muscleGroup) })
 
         var buckets: [Date: Set<String>] = [:]
 
         for workout in workouts {
             let day = calendar.startOfDay(for: workout.date)
-            var groups = workout.sets.compactMap { set in
-                exerciseLookup[set.exerciseName]
-            }
+            var groups: [String] = workout.sets.compactMap { exerciseLookup[$0.exerciseId] }
             // セット数0でもドットを表示するため、空の場合はデフォルトグループを付与
             if groups.isEmpty {
                 groups = ["other"]

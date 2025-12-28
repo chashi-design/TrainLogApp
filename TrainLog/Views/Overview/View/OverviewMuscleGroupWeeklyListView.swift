@@ -17,7 +17,10 @@ struct OverviewMuscleGroupWeeklyListView: View {
     let exercises: [ExerciseCatalog]
 
     @Environment(\.weightUnit) private var weightUnit
-    private let locale = Locale(identifier: "ja_JP")
+    private var locale: Locale {
+        let isJapanese = Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+        return isJapanese ? Locale(identifier: "ja_JP") : Locale(identifier: "en_US")
+    }
     @State private var navigationFeedbackTrigger = 0
     @State private var selectedWeekItem: WeekListItem?
 

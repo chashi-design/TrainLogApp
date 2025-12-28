@@ -20,7 +20,13 @@ struct OverviewMuscleGroupSummaryView: View {
         let id = UUID()
     }
     private let calendar = Calendar.appCurrent
-    private let locale = Locale(identifier: "ja_JP")
+    private var isJapaneseLocale: Bool {
+        Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
+    }
+    private var strings: OverviewMuscleGroupStrings {
+        OverviewMuscleGroupStrings(isJapanese: isJapaneseLocale)
+    }
+    private var locale: Locale { strings.locale }
 
     private var exerciseVolumes: [ExerciseVolume] {
         OverviewMetrics.exerciseVolumesForCurrentWeek(
@@ -118,8 +124,8 @@ struct OverviewMuscleGroupSummaryView: View {
 
     var body: some View {
         List {
-            Section("総ボリューム") {
-                Picker("期間", selection: $chartPeriod) {
+            Section(strings.totalVolumeSectionTitle) {
+                Picker(strings.periodPickerTitle, selection: $chartPeriod) {
                     ForEach(PartsChartPeriod.allCases, id: \.self) { option in
                         Text(option.title).tag(option)
                     }
@@ -133,7 +139,7 @@ struct OverviewMuscleGroupSummaryView: View {
                     animateOnAppear: true,
                     animateOnTrigger: true,
                     animationTrigger: chartPeriod.hashValue,
-                    yValueLabel: "ボリューム(\(weightUnit.unitLabel))",
+                    yValueLabel: strings.volumeLabel(unit: weightUnit.unitLabel),
                     yAxisLabel: weightUnit.unitLabel
                 )
                     .listRowInsets(EdgeInsets())
@@ -174,12 +180,12 @@ struct OverviewMuscleGroupSummaryView: View {
                     }
                 } header: {
                     HStack {
-                        Text("週ごとの記録")
+                        Text(strings.weeklyRecordsTitle)
                         Spacer()
                         Button {
                             selectedWeeklyListItem = WeeklyListDestination()
                         } label: {
-                            Text("すべて表示")
+                            Text(strings.viewAllTitle)
                                 .font(.subheadline)
                                 .foregroundStyle(Color.accentColor)
                                 .contentShape(Rectangle())
@@ -189,8 +195,8 @@ struct OverviewMuscleGroupSummaryView: View {
                 }
             }
 
-            Section("種目ごとの記録") {
-                Picker("表示", selection: $filter) {
+            Section(strings.exerciseRecordsSectionTitle) {
+                Picker(strings.filterPickerTitle, selection: $filter) {
                     ForEach(PartsFilter.allCases, id: \.self) { option in
                         Text(option.title).tag(option)
                     }
@@ -203,7 +209,7 @@ struct OverviewMuscleGroupSummaryView: View {
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(item.exercise.name)
+                                Text(displayName(for: item.exercise))
                                     .font(.headline)
                                 Text(currentWeekLabel)
                                     .font(.subheadline)
@@ -233,7 +239,7 @@ struct OverviewMuscleGroupSummaryView: View {
                     .buttonStyle(.plain)
                 }
                 if filteredExercises.isEmpty {
-                    Text("対象の種目がありません")
+                    Text(strings.noExerciseText)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -252,7 +258,7 @@ struct OverviewMuscleGroupSummaryView: View {
         }
         .navigationDestination(item: $selectedWeeklyListItem) { _ in
             OverviewMuscleGroupWeeklyListView(
-                title: "週ごとの記録",
+                title: strings.weeklyRecordsTitle,
                 items: weeklyListData,
                 workouts: workouts,
                 exercises: exercises
@@ -296,16 +302,16 @@ struct OverviewMuscleGroupSummaryView: View {
         let start = calendar.startOfWeek(for: date) ?? date
         let formatter = DateFormatter()
         formatter.locale = locale
-        formatter.dateFormat = "yyyy年MM月dd日"
-        return "\(formatter.string(from: start))週"
+        formatter.dateFormat = strings.weekRangeDateFormat
+        return strings.weekRangeLabel(base: formatter.string(from: start))
     }
 
     private var currentWeekLabel: String {
         let start = calendar.startOfWeek(for: Date()) ?? Date()
         let formatter = DateFormatter()
         formatter.locale = locale
-        formatter.dateFormat = "M/d"
-        return "\(formatter.string(from: start))週"
+        formatter.dateFormat = strings.currentWeekDateFormat
+        return strings.weekRangeLabel(base: formatter.string(from: start))
     }
 
     private func chartLabel(for date: Date, period: PartsChartPeriod) -> String {
@@ -313,16 +319,20 @@ struct OverviewMuscleGroupSummaryView: View {
         formatter.locale = locale
         switch period {
         case .day:
-            formatter.dateFormat = "M/d"
+            formatter.dateFormat = strings.dayChartDateFormat
             return formatter.string(from: date)
         case .week:
             let start = calendar.startOfWeek(for: date) ?? date
-            formatter.dateFormat = "M/d"
-            return "\(formatter.string(from: start))週"
+            formatter.dateFormat = strings.weekChartDateFormat
+            return strings.weekRangeLabel(base: formatter.string(from: start))
         case .month:
-            formatter.dateFormat = "M月"
+            formatter.dateFormat = strings.monthChartDateFormat
             return formatter.string(from: date)
         }
+    }
+
+    private func displayName(for exercise: ExerciseCatalog) -> String {
+        exercise.displayName(isJapanese: isJapaneseLocale)
     }
 }
 
@@ -332,10 +342,11 @@ enum PartsChartPeriod: CaseIterable {
     case month
 
     var title: String {
+        let isJapanese = Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
         switch self {
-        case .day: return "日"
-        case .week: return "週"
-        case .month: return "月"
+        case .day: return isJapanese ? "日" : "Day"
+        case .week: return isJapanese ? "週" : "Week"
+        case .month: return isJapanese ? "月" : "Month"
         }
     }
 }
@@ -345,9 +356,34 @@ enum PartsFilter: CaseIterable {
     case favorites
 
     var title: String {
+        let isJapanese = Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
         switch self {
-        case .all: return "すべて"
-        case .favorites: return "お気に入り"
+        case .all: return isJapanese ? "すべて" : "All"
+        case .favorites: return isJapanese ? "お気に入り" : "Favorites"
         }
+    }
+}
+
+private struct OverviewMuscleGroupStrings {
+    let isJapanese: Bool
+
+    var locale: Locale { isJapanese ? Locale(identifier: "ja_JP") : Locale(identifier: "en_US") }
+    var totalVolumeSectionTitle: String { isJapanese ? "総ボリューム" : "Total Volume" }
+    var periodPickerTitle: String { isJapanese ? "期間" : "Period" }
+    var weeklyRecordsTitle: String { isJapanese ? "週ごとの記録" : "Weekly Records" }
+    var viewAllTitle: String { isJapanese ? "すべて表示" : "View All" }
+    var exerciseRecordsSectionTitle: String { isJapanese ? "種目ごとの記録" : "Exercises" }
+    var filterPickerTitle: String { isJapanese ? "表示" : "Filter" }
+    var noExerciseText: String { isJapanese ? "対象の種目がありません" : "No exercises found." }
+    var weekRangeDateFormat: String { isJapanese ? "yyyy年MM月dd日" : "MMM d, yyyy" }
+    var currentWeekDateFormat: String { isJapanese ? "M/d" : "MMM d" }
+    var dayChartDateFormat: String { "M/d" }
+    var weekChartDateFormat: String { isJapanese ? "M/d" : "MMM d" }
+    var monthChartDateFormat: String { isJapanese ? "M月" : "MMM" }
+    func weekRangeLabel(base: String) -> String {
+        isJapanese ? "\(base)週" : "\(base) W"
+    }
+    func volumeLabel(unit: String) -> String {
+        isJapanese ? "ボリューム(\(unit))" : "Volume (\(unit))"
     }
 }
