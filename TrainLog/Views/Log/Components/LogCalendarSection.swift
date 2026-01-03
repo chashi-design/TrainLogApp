@@ -5,12 +5,14 @@ struct LogCalendarSection: View {
     @Binding var selectedDate: Date
     let workoutDots: [Date: [Color]]
 
+    @Environment(\.scenePhase) private var scenePhase
     @State private var months: [Date]
     @State private var selectionIndex: Int
     @State private var monthNavHapticTrigger: Int = 0
     @State private var swipeHapticTrigger: Int = 0
     @State private var dayTapHapticTrigger: Int = 0
     @State private var suppressSwipeHaptic = false
+    @State private var cachedFirstWeekday: Int
     private var isJapaneseLocale: Bool {
         Locale.preferredLanguages.first?.hasPrefix("ja") ?? false
     }
@@ -23,7 +25,7 @@ struct LogCalendarSection: View {
     }
 
     private let today = LogDateHelper.normalized(Date())
-    private let calendar = Calendar.current
+    private let calendar = Calendar.appCurrent
     private var locale: Locale { strings.locale }
     private let containerHeight: CGFloat = 312
     private let baseRowHeight: CGFloat = 40
@@ -35,15 +37,17 @@ struct LogCalendarSection: View {
         _selectedDate = selectedDate
         self.workoutDots = workoutDots
 
-        let start = LogCalendarSection.startOfMonth(Calendar.current, date: selectedDate.wrappedValue)
+        let calendar = Calendar.appCurrent
+        let start = LogCalendarSection.startOfMonth(calendar, date: selectedDate.wrappedValue)
         let built = LogCalendarSection.buildMonths(
-            calendar: Calendar.current,
+            calendar: calendar,
             today: LogDateHelper.normalized(Date()),
             workoutDots: workoutDots,
             selectedMonth: start
         )
         _months = State(initialValue: built)
         _selectionIndex = State(initialValue: built.firstIndex(of: start) ?? max(built.count - 1, 0))
+        _cachedFirstWeekday = State(initialValue: calendar.firstWeekday)
     }
 
     var body: some View {
@@ -72,6 +76,13 @@ struct LogCalendarSection: View {
                 selectedMonth: currentMonth
             )
             selectionIndex = months.firstIndex(of: currentMonth) ?? max(months.count - 1, 0)
+        }
+        .onChange(of: scenePhase) { _, newValue in
+            guard newValue == .active else { return }
+            let firstWeekday = calendar.firstWeekday
+            if firstWeekday != cachedFirstWeekday {
+                cachedFirstWeekday = firstWeekday
+            }
         }
     }
 
@@ -112,7 +123,7 @@ struct LogCalendarSection: View {
 
     private var weekdayHeader: some View {
         HStack {
-            ForEach(strings.weekdaySymbols, id: \.self) { symbol in
+            ForEach(orderedWeekdaySymbols, id: \.self) { symbol in
                 Text(symbol)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -225,7 +236,8 @@ struct LogCalendarSection: View {
         else { return [] }
 
         let firstWeekday = calendar.component(.weekday, from: firstDay)
-        var days: [Date?] = Array(repeating: nil, count: firstWeekday - 1)
+        let leadingEmptyCount = (firstWeekday - calendar.firstWeekday + 7) % 7
+        var days: [Date?] = Array(repeating: nil, count: leadingEmptyCount)
 
         for day in range {
             if let date = calendar.date(byAdding: .day, value: day - 1, to: firstDay) {
@@ -274,6 +286,14 @@ struct LogCalendarSection: View {
             workoutDots: workoutDots,
             selectedMonth: month
         )
+    }
+
+    private var orderedWeekdaySymbols: [String] {
+        let symbols = strings.weekdaySymbols
+        guard symbols.count == 7 else { return symbols }
+        let firstIndex = max(0, min(6, calendar.firstWeekday - 1))
+        if firstIndex == 0 { return symbols }
+        return Array(symbols[firstIndex...]) + Array(symbols[..<firstIndex])
     }
 
     // MARK: - Static helpers
