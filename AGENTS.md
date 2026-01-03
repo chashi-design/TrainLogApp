@@ -134,6 +134,7 @@
 - アクティビティタブ右上の設定導線はモーダル（sheet）で表示し、Xボタンで閉じる
 - セクションラベルがない `List` には `.contentMargins(.top, 4, for: .scrollContent)` を適用する
 - 重量単位の切替は設定画面の `Picker`（`.automatic`）で実装し、カスタムオーバーレイは使わない
+- LogViewのカレンダーは「週の始まり」設定に追従し、アプリ復帰時（scenePhase active）に再描画で反映する
 
 ## Shared State / Weekly UI Rules
 - お気に入り状態はタブ共通ストアで管理し、TabView配下でenvironmentObject注入する
